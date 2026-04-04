@@ -1,16 +1,15 @@
-from pathlib import Path
-from typing import List, Sequence, Tuple
+from __future__ import annotations
 
-import torch
-from torch import Tensor
-from torch.utils.data import DataLoader, Dataset
+import warnings
+from pathlib import Path
+from typing import List, Sequence
 
 from src.vad.data.base import BaseVADDataset
-from src.vad.data.preprocessing.preprocessing import VADPreprocessor
 from src.vad.data.samples import AudioSample
+from src.vad.data.utils.file_utils import iter_audio_files
 
 
-class LibriVADDataset(BaseVADDataset):
+class LibriVADDataset(BaseVADDataset[AudioSample]):
     """
     Dataset for LibriVAD audio files and their corresponding label files.
 
@@ -20,13 +19,11 @@ class LibriVADDataset(BaseVADDataset):
 
     def __init__(
         self,
-        results_root: str,
-        labels_root: str,
+        results_root: str | Path,
+        labels_root: str | Path,
         datasets: Sequence[str] | None = None,
         splits: Sequence[str] | None = None,
-        sample_rate: int = 16000,
         extensions: tuple[str, ...] = (".wav",),
-        preprocessor: VADPreprocessor | None = None,
     ) -> None:
         """
         Args:
@@ -34,9 +31,7 @@ class LibriVADDataset(BaseVADDataset):
             labels_root (str): Root directory containing label files.
             datasets (Sequence[str] | None): Dataset names to include.
             splits (Sequence[str] | None): Split names to include.
-            sample_rate (int): Target sample rate.
             extensions (tuple[str, ...]): Allowed audio file extensions.
-            preprocessor (VADPreprocessor | None): Optional preprocessing pipeline.
         """
         self.results_root = Path(results_root)
         self.labels_root = Path(labels_root)
@@ -61,12 +56,7 @@ class LibriVADDataset(BaseVADDataset):
         self.extensions = tuple(ext.lower() for ext in extensions)
         samples = self._build_samples()
 
-        super().__init__(
-            samples=samples,
-            sample_rate=sample_rate,
-            extensions=self.extensions,
-            preprocessor=preprocessor,
-        )
+        super().__init__(samples=samples)
 
     def _build_samples(self) -> List[AudioSample]:
         """
@@ -92,7 +82,10 @@ class LibriVADDataset(BaseVADDataset):
                 if not label_split_dir.exists() or not label_split_dir.is_dir():
                     continue
 
-                for audio_path in self._iter_audio_files(audio_split_dir):
+                for audio_path in iter_audio_files(
+                    audio_split_dir,
+                    extensions=self.extensions,
+                ):
                     label_path = self._audio_to_label_path(
                         audio_path=audio_path,
                         dataset_name=dataset_name,
@@ -100,14 +93,20 @@ class LibriVADDataset(BaseVADDataset):
                     )
 
                     if label_path.exists():
-                        samples.append(AudioSample(audio_path, label_path))
+                        samples.append(
+                            AudioSample(
+                                audio_path=audio_path,
+                                label_path=label_path,
+                            )
+                        )
                     else:
                         missing_labels += 1
 
         if missing_labels > 0:
-            print(
-                f"Warning: skipped {missing_labels} audio files without labels. "
-                f"Using {len(samples)} matched pairs."
+            warnings.warn(
+                f"Skipped {missing_labels} audio files without labels. "
+                f"Using {len(samples)} matched pairs.",
+                stacklevel=2,
             )
 
         if not samples:
@@ -155,108 +154,40 @@ class LibriVADDataset(BaseVADDataset):
         )
 
 
-def pad_collate_fn(
-    batch: List[Tuple[Tensor, Tensor]],
-) -> Tuple[Tensor, Tensor, Tensor]:
-    waveforms, labels = zip(*batch)
+# def pad_collate_fn(
+#     batch: list[tuple[Tensor, Tensor]],
+# ) -> tuple[Tensor, Tensor, Tensor]:
+#     waveforms, labels = zip(*batch)
+#     lengths = torch.tensor([w.shape[0] for w in waveforms], dtype=torch.long)
 
-    lengths = torch.tensor([w.shape[0] for w in waveforms], dtype=torch.long)
-    max_len = int(lengths.max().item())
+#     padded_waveforms = pad_sequence(waveforms, batch_first=True, padding_value=0.0)
+#     padded_labels = pad_sequence(labels, batch_first=True, padding_value=0.0)
 
-    batch_size = len(waveforms)
-    padded_waveforms = torch.zeros(batch_size, max_len, dtype=torch.float32)
-    padded_labels = torch.zeros(batch_size, max_len, dtype=torch.float32)
-
-    for i, (waveform, label) in enumerate(zip(waveforms, labels)):
-        length = waveform.shape[0]
-        padded_waveforms[i, :length] = waveform
-        padded_labels[i, :length] = label
-
-    return padded_waveforms, padded_labels, lengths
+#     return padded_waveforms, padded_labels, lengths
 
 
-def create_dataloader(
-    dataset: Dataset[Tuple[Tensor, Tensor]],
-    batch_size: int = 8,
-    shuffle: bool = True,
-    num_workers: int = 0,
-) -> DataLoader[Tuple[Tensor, Tensor]]:
-    """
-    Create a DataLoader for a VAD dataset.
+# def create_dataloader(
+#     dataset: Dataset[Tuple[Tensor, Tensor]],
+#     batch_size: int = 8,
+#     shuffle: bool = True,
+#     num_workers: int = 0,
+# ) -> DataLoader[Tuple[Tensor, Tensor]]:
+#     """
+#     Create a DataLoader for a VAD dataset.
 
-    Args:
-        dataset (Dataset[Tuple[Tensor, Tensor]]): Dataset yielding waveform-label pairs.
-        batch_size (int): Number of samples per batch.
-        shuffle (bool): Whether to shuffle the dataset.
-        num_workers (int): Number of worker processes.
+#     Args:
+#         dataset (Dataset[Tuple[Tensor, Tensor]]): Dataset yielding waveform-label pairs.
+#         batch_size (int): Number of samples per batch.
+#         shuffle (bool): Whether to shuffle the dataset.
+#         num_workers (int): Number of worker processes.
 
-    Returns:
-        DataLoader[Tuple[Tensor, Tensor]]: Configured DataLoader instance.
-    """
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        num_workers=num_workers,
-        collate_fn=pad_collate_fn,
-    )
-
-
-if __name__ == "__main__":
-    from src.vad.data.preprocessing import (
-        AudioPreprocessor,
-        LabelAligner,
-        LogMelFeatureExtractor,
-        VADPreprocessor,
-    )
-
-    audio_preprocessor = AudioPreprocessor(
-        target_sample_rate=16000,
-        normalize=True,
-    )
-
-    feature_extractor = LogMelFeatureExtractor(
-        sample_rate=16000,
-        frame_length=400,
-        hop_length=160,
-        n_fft=400,
-        n_mels=40,
-    )
-
-    label_aligner = LabelAligner(
-        hop_length=feature_extractor.hop_length,
-        frame_length=feature_extractor.frame_length,
-        center=True,
-    )
-
-    preprocessor = VADPreprocessor(
-        audio_preprocessor=audio_preprocessor,
-        feature_extractor=feature_extractor,
-        label_aligner=label_aligner,
-    )
-
-    dataset = LibriVADDataset(
-        results_root="/Users/antje/Blynt/LibriVAD/Results",
-        labels_root="/Users/antje/Blynt/LibriVAD/Files/Labels",
-        datasets=["LibriSpeech"],
-        splits=["train-clean-100"],
-        sample_rate=16000,
-        preprocessor=preprocessor,
-    )
-
-    print(f"Dataset size: {len(dataset)}")
-
-    features, labels = dataset[0]
-    waveform, sr = dataset._load_audio(dataset.samples[0].audio_path)
-    orig_labels = dataset._load_labels(dataset.samples[0].label_path)
-    # debug_plot_waveform_with_labels(waveform, orig_labels, sr)
-    # debug_plot_features_with_labels(features, labels)
-    # debug_plot_features_with_label_overlay(features, labels)
-    # debug_plot_alignment(
-    #     sample_labels=orig_labels,
-    #     num_frames=features.shape[1],
-    #     hop_length=feature_extractor.hop_length,
-    #     frame_length=feature_extractor.frame_length,
-    #     start_frame=35,
-    #     aligner_output=label_aligner(orig_labels, num_frames=features.shape[1]),
-    # )
+#     Returns:
+#         DataLoader[Tuple[Tensor, Tensor]]: Configured DataLoader instance.
+#     """
+#     return DataLoader(
+#         dataset,
+#         batch_size=batch_size,
+#         shuffle=shuffle,
+#         num_workers=num_workers,
+#         collate_fn=pad_collate_fn,
+#     )
