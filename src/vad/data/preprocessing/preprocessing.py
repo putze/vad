@@ -47,8 +47,26 @@ class VADPreprocessor:
                 - features: Log-Mel features [n_mels, num_frames]
                 - aligned_labels: Frame-level labels [num_frames]
         """
-        waveform, sample_rate = self.audio_preprocessor(waveform, sample_rate)
-        features = self.feature_extractor(waveform, sample_rate)
+        if waveform.ndim != 1:
+            raise ValueError(f"`waveform` must be 1D, got shape {tuple(waveform.shape)}")
+
+        if labels.ndim != 1:
+            raise ValueError(f"`labels` must be 1D, got shape {tuple(labels.shape)}")
+
+        if waveform.shape[0] != labels.shape[0]:
+            raise ValueError(
+                "`waveform` and `labels` must have the same length, "
+                f"got {waveform.shape[0]} and {labels.shape[0]}"
+            )
+
+        waveform, labels, sample_rate = self.audio_preprocessor(waveform, labels, sample_rate)
+        features = self.feature_extractor(waveform)
         aligned_labels = self.label_aligner(labels, num_frames=features.shape[-1])
+
+        if aligned_labels.shape[0] != features.shape[-1]:
+            raise ValueError(
+                "Aligned labels and extracted features must have matching frame counts, "
+                f"got labels={aligned_labels.shape[0]} and features={features.shape[-1]}"
+            )
 
         return features, aligned_labels
