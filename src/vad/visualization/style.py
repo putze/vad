@@ -1,7 +1,13 @@
+from typing import Literal
+
+SeabornStyle = Literal["white", "dark", "whitegrid", "darkgrid", "ticks"]
+SeabornContext = Literal["paper", "notebook", "talk", "poster"]
+
+
 def set_plot_style(
     use_seaborn: bool = True,
-    style: str = "whitegrid",
-    context: str = "talk",
+    style: SeabornStyle = "whitegrid",
+    context: SeabornContext = "talk",
 ) -> None:
     """
     Configure plotting style for visualizations.

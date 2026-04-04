@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import cast
+
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.typing import NDArray
 from torch import Tensor
 
 
@@ -29,7 +32,7 @@ def validate_2d_tensor(x: Tensor, name: str) -> None:
         raise ValueError(f"`{name}` must be 2D, got shape {tuple(x.shape)}")
 
 
-def to_numpy_1d(x: Tensor) -> np.ndarray:
+def to_numpy_1d(x: Tensor) -> NDArray[np.float32]:
     """
     Convert a tensor to a NumPy array.
 
@@ -39,10 +42,10 @@ def to_numpy_1d(x: Tensor) -> np.ndarray:
     Returns:
         np.ndarray: Detached CPU NumPy array.
     """
-    return x.detach().cpu().numpy()
+    return cast(NDArray[np.float32], x.detach().cpu().numpy())
 
 
-def to_numpy_2d(x: Tensor) -> np.ndarray:
+def to_numpy_2d(x: Tensor) -> NDArray[np.float32]:
     """
     Convert a tensor to a NumPy array.
 
@@ -52,7 +55,7 @@ def to_numpy_2d(x: Tensor) -> np.ndarray:
     Returns:
         np.ndarray: Detached CPU NumPy array.
     """
-    return x.detach().cpu().numpy()
+    return cast(NDArray[np.float32], x.detach().cpu().numpy())
 
 
 def binarize_labels(labels: np.ndarray) -> np.ndarray:

@@ -18,7 +18,7 @@ def plot_label_timeline(
     labels: Tensor,
     sr: int,
     title: str = "Sample-Level Label Timeline",
-    figsize: tuple[int, int] = (14, 2.5),
+    figsize: tuple[float, float] = (14, 2.5),
     start_s: float | None = None,
     end_s: float | None = None,
     mode: Literal["step", "fill"] = "step",

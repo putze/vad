@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Sized
 from pathlib import Path
-from typing import Generic, Protocol, Sequence, TypeVar
+from typing import Generic, Protocol, Sequence, TypeVar, cast
 
 import numpy as np
 import torch
 import torchaudio
 from torch import Tensor
 from torch.utils.data import Dataset
+
+from src.vad.data.preprocessing.preprocessing import VADPreprocessor
 
 
 class VADSampleProtocol(Protocol):
@@ -93,7 +96,7 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
 
         return labels_tensor.float()
 
-    def __getitem__(self, index: int) -> tuple[Tensor, Tensor]:
+    def __getitem__(self, index: int) -> tuple[Tensor, Tensor, int]:
         """
         Retrieve one raw dataset sample.
 
@@ -101,11 +104,11 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
             index (int): Sample index.
 
         Returns:
-            tuple[Tensor, Tensor]: Waveform and labels.
+            tuple[Tensor, Tensor, int]: Waveform, labels, and sample rate.
         """
         sample = self.samples[index]
 
-        waveform, _ = self._load_audio(sample.audio_path)
+        waveform, sample_rate = self._load_audio(sample.audio_path)
         labels = self._load_labels(sample.label_path)
 
         if waveform.shape[0] != labels.shape[0]:
@@ -115,4 +118,58 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
                 f"for sample audio={sample.audio_path} label={sample.label_path}"
             )
 
-        return waveform, labels
+        return waveform, labels, sample_rate
+
+
+class ProcessedVADDataset(Dataset):
+    """
+    Wrap a raw VAD dataset and apply sample processing.
+
+    The base dataset must return:
+        waveform: Tensor [T]
+        labels: Tensor [T]
+        sample_rate: int
+
+    This dataset returns:
+        features: Tensor [n_mels, num_frames]
+        aligned_labels: Tensor [num_frames]
+    """
+
+    def __init__(
+        self,
+        base_dataset: Dataset,
+        processor: VADPreprocessor,
+    ) -> None:
+        self.base_dataset = base_dataset
+        self.processor = processor
+
+    def __len__(self) -> int:
+        return len(cast(Sized, self.base_dataset))
+
+    def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
+        waveform, labels, sample_rate = self.base_dataset[idx]
+
+        features, aligned_labels = self.processor(
+            waveform,
+            labels,
+            sample_rate,
+        )
+
+        if features.ndim != 2:
+            raise ValueError(
+                f"Expected features with shape [n_mels, T], got {tuple(features.shape)}"
+            )
+
+        if aligned_labels.ndim != 1:
+            raise ValueError(
+                f"Expected aligned labels with shape [T], got {tuple(aligned_labels.shape)}"
+            )
+
+        if features.shape[1] != aligned_labels.shape[0]:
+            raise ValueError(
+                f"Feature/label mismatch at idx={idx}: "
+                f"features={tuple(features.shape)}, "
+                f"labels={tuple(aligned_labels.shape)}"
+            )
+
+        return features.float(), aligned_labels.long()
