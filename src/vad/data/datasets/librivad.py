@@ -152,30 +152,3 @@ class LibriVADDataset(BaseVADDataset[AudioSample]):
         return (
             self.labels_root / dataset_name / split_name / speaker_id / chapter_id / f"{stem}.npy"
         )
-
-
-# def create_dataloader(
-#     dataset: Dataset[Tuple[Tensor, Tensor]],
-#     batch_size: int = 8,
-#     shuffle: bool = True,
-#     num_workers: int = 0,
-# ) -> DataLoader[Tuple[Tensor, Tensor]]:
-#     """
-#     Create a DataLoader for a VAD dataset.
-
-#     Args:
-#         dataset (Dataset[Tuple[Tensor, Tensor]]): Dataset yielding waveform-label pairs.
-#         batch_size (int): Number of samples per batch.
-#         shuffle (bool): Whether to shuffle the dataset.
-#         num_workers (int): Number of worker processes.
-
-#     Returns:
-#         DataLoader[Tuple[Tensor, Tensor]]: Configured DataLoader instance.
-#     """
-#     return DataLoader(
-#         dataset,
-#         batch_size=batch_size,
-#         shuffle=shuffle,
-#         num_workers=num_workers,
-#         collate_fn=pad_collate_fn,
-#     )

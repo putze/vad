@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sized
 from pathlib import Path
 from typing import Generic, Protocol, Sequence, TypeVar, cast
@@ -27,8 +28,7 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
     """
     Base dataset class for Voice Activity Detection (VAD).
 
-    Handles loading of audio waveforms and corresponding label arrays,
-    with optional preprocessing.
+    Handles loading of audio waveforms and corresponding label arrays.
     """
 
     def __init__(self, samples: Sequence[SampleType]) -> None:
@@ -111,28 +111,39 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
         waveform, sample_rate = self._load_audio(sample.audio_path)
         labels = self._load_labels(sample.label_path)
 
-        if waveform.shape[0] != labels.shape[0]:
-            raise ValueError(
-                "Waveform and labels must have the same length, "
-                f"got waveform={waveform.shape[0]} and labels={labels.shape[0]} "
-                f"for sample audio={sample.audio_path} label={sample.label_path}"
-            )
+        waveform_len = waveform.shape[0]
+        labels_len = labels.shape[0]
+
+        # Check if waveform and labels have the same lengths
+        diff = abs(waveform_len - labels_len)
+
+        if waveform_len != labels_len:
+            # Crop if small difference
+            if diff <= 1:
+                warnings.warn(
+                    f"Cropping audio/label mismatch: "
+                    f"{sample.audio_path.name} waveform={waveform_len}, labels={labels_len}"
+                )
+                min_len = min(waveform_len, labels_len)
+                waveform = waveform[:min_len]
+                labels = labels[:min_len]
+            else:
+                raise ValueError(
+                    "Waveform and labels must have the same length, "
+                    f"got waveform={waveform_len} and labels={labels_len} "
+                    f"(diff={diff}) "
+                    f"for sample audio={sample.audio_path} label={sample.label_path}"
+                )
 
         return waveform, labels, sample_rate
 
 
 class ProcessedVADDataset(Dataset):
     """
-    Wrap a raw VAD dataset and apply sample processing.
+    Wrap a base VAD dataset and apply preprocessing.
 
-    The base dataset must return:
-        waveform: Tensor [T]
-        labels: Tensor [T]
-        sample_rate: int
-
-    This dataset returns:
-        features: Tensor [n_mels, num_frames]
-        aligned_labels: Tensor [num_frames]
+    Expects base samples as (waveform [T], labels [T], sample_rate),
+    and returns (features [n_mels, T], aligned_labels [T]).
     """
 
     def __init__(
@@ -140,14 +151,36 @@ class ProcessedVADDataset(Dataset):
         base_dataset: Dataset,
         processor: VADPreprocessor,
     ) -> None:
+        """
+        Args:
+            base_dataset (Dataset): Dataset yielding raw audio samples.
+            processor (VADPreprocessor): Preprocessing pipeline.
+        """
         self.base_dataset = base_dataset
         self.processor = processor
 
     def __len__(self) -> int:
+        """
+        Return the number of samples in the dataset.
+        """
         return len(cast(Sized, self.base_dataset))
 
-    def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
-        waveform, labels, sample_rate = self.base_dataset[idx]
+    def __getitem__(self, index: int) -> tuple[Tensor, Tensor]:
+        """
+        Retrieve and preprocess a dataset sample.
+
+        Args:
+            index (int): Sample index.
+
+        Returns:
+            tuple[Tensor, Tensor]:
+                - features: [n_mels, T]
+                - aligned_labels: [T]
+
+        Raises:
+            ValueError: If output shapes are invalid or mismatched.
+        """
+        waveform, labels, sample_rate = self.base_dataset[index]
 
         features, aligned_labels = self.processor(
             waveform,
@@ -167,7 +200,7 @@ class ProcessedVADDataset(Dataset):
 
         if features.shape[1] != aligned_labels.shape[0]:
             raise ValueError(
-                f"Feature/label mismatch at idx={idx}: "
+                f"Feature/label mismatch at index={index}: "
                 f"features={tuple(features.shape)}, "
                 f"labels={tuple(aligned_labels.shape)}"
             )
