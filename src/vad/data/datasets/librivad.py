@@ -203,8 +203,6 @@ def create_dataloader(
 
 
 if __name__ == "__main__":
-    import numpy as np
-
     from src.vad.data.preprocessing import (
         AudioPreprocessor,
         LabelAligner,
@@ -248,19 +246,17 @@ if __name__ == "__main__":
 
     print(f"Dataset size: {len(dataset)}")
 
-    sample = dataset.samples[0]
-    labels = np.load(sample.label_path)
-
     features, labels = dataset[0]
-    print("Single sample:")
-    print("  features shape:", features.shape)  # [n_mels, frames]
-    print("  labels shape:  ", labels.shape)  # [frames]
-
     waveform, sr = dataset._load_audio(dataset.samples[0].audio_path)
-
-    duration = waveform.shape[0] / sr
-    num_frames = 1409
-    frame_duration = num_frames * (160 / sr)
-
-    print("audio duration:", duration)
-    print("feature duration:", frame_duration)
+    orig_labels = dataset._load_labels(dataset.samples[0].label_path)
+    # debug_plot_waveform_with_labels(waveform, orig_labels, sr)
+    # debug_plot_features_with_labels(features, labels)
+    # debug_plot_features_with_label_overlay(features, labels)
+    # debug_plot_alignment(
+    #     sample_labels=orig_labels,
+    #     num_frames=features.shape[1],
+    #     hop_length=feature_extractor.hop_length,
+    #     frame_length=feature_extractor.frame_length,
+    #     start_frame=35,
+    #     aligner_output=label_aligner(orig_labels, num_frames=features.shape[1]),
+    # )
