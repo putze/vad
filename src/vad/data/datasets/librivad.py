@@ -154,18 +154,6 @@ class LibriVADDataset(BaseVADDataset[AudioSample]):
         )
 
 
-# def pad_collate_fn(
-#     batch: list[tuple[Tensor, Tensor]],
-# ) -> tuple[Tensor, Tensor, Tensor]:
-#     waveforms, labels = zip(*batch)
-#     lengths = torch.tensor([w.shape[0] for w in waveforms], dtype=torch.long)
-
-#     padded_waveforms = pad_sequence(waveforms, batch_first=True, padding_value=0.0)
-#     padded_labels = pad_sequence(labels, batch_first=True, padding_value=0.0)
-
-#     return padded_waveforms, padded_labels, lengths
-
-
 # def create_dataloader(
 #     dataset: Dataset[Tuple[Tensor, Tensor]],
 #     batch_size: int = 8,
