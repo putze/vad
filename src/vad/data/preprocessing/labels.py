@@ -1,4 +1,3 @@
-import torch
 import torch.nn.functional as F
 from torch import Tensor
 
@@ -50,16 +49,17 @@ class LabelAligner:
             pad = self.frame_length // 2
             labels = F.pad(labels, (pad, pad), mode="constant", value=0.0)
 
-        frame_labels = torch.zeros(num_frames, dtype=torch.float32)
+        # Create sliding windows: shape → [num_windows, frame_length]
+        windows = labels.unfold(
+            dimension=0,
+            size=self.frame_length,
+            step=self.hop_length,
+        )
 
-        for frame_idx in range(num_frames):
-            start = frame_idx * self.hop_length
-            end = start + self.frame_length
+        # Handle case where unfold gives more frames than expected
+        windows = windows[:num_frames]
 
-            chunk = labels[start:end]
-            if chunk.numel() == 0:
-                continue
-
-            frame_labels[frame_idx] = 1.0 if chunk.max() > 0 else 0.0
+        # Max over each frame window → [num_frames]
+        frame_labels = windows.max(dim=1).values
 
         return frame_labels
