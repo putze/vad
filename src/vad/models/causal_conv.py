@@ -52,21 +52,20 @@ class CausalVAD(nn.Module):
     """
     Fully convolutional causal Voice Activity Detection (VAD) model.
 
-    This model performs per-frame binary classification (speech vs non-speech)
-    using only past and current context (causal).
+    This model performs per-frame binary classification using a single
+    logit per frame.
 
     Input:
         x: Tensor [B, n_mels, T]
 
     Output:
-        logits: Tensor [B, num_classes, T]
+        logits: Tensor [B, 1, T]
     """
 
     def __init__(
         self,
         n_mels: int = 40,
         hidden_channels: int = 128,
-        num_classes: int = 2,
         dropout: float = 0.1,
     ) -> None:
         super().__init__()
@@ -84,7 +83,7 @@ class CausalVAD(nn.Module):
             nn.BatchNorm1d(hidden_channels),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout),
-            nn.Conv1d(hidden_channels, num_classes, kernel_size=1),
+            nn.Conv1d(hidden_channels, 1, kernel_size=1),
         )
 
     def forward(self, x: Tensor) -> Tensor:
@@ -93,20 +92,35 @@ class CausalVAD(nn.Module):
             x: Tensor [B, n_mels, T]
 
         Returns:
-            logits: Tensor [B, num_classes, T]
+            logits: Tensor [B, 1, T]
         """
         return cast(Tensor, self.net(x))
 
     @torch.no_grad()
-    def predict(self, x: Tensor) -> Tensor:
+    def predict_proba(self, x: Tensor) -> Tensor:
         """
-        Predict class labels (argmax).
+        Predict speech probabilities per frame.
 
         Args:
             x: Tensor [B, n_mels, T]
 
         Returns:
-            Tensor [B, T] with class indices
+            Tensor [B, T] with probabilities in [0, 1]
         """
-        logits = self.forward(x)
-        return logits.argmax(dim=1)
+        logits = self.forward(x)[:, 0, :]
+        return torch.sigmoid(logits)
+
+    @torch.no_grad()
+    def predict(self, x: Tensor, threshold: float = 0.5) -> Tensor:
+        """
+        Predict binary frame labels.
+
+        Args:
+            x: Tensor [B, n_mels, T]
+            threshold: Decision threshold on sigmoid probabilities.
+
+        Returns:
+            Tensor [B, T] with binary predictions {0, 1}
+        """
+        probs = self.predict_proba(x)
+        return (probs >= threshold).long()
