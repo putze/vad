@@ -4,7 +4,7 @@ import warnings
 from pathlib import Path
 from typing import List, Sequence
 
-from src.vad.data.base import BaseVADDataset
+from src.vad.data.datasets.base import BaseVADDataset
 from src.vad.data.samples import AudioSample
 from src.vad.data.utils.file_utils import iter_audio_files
 
