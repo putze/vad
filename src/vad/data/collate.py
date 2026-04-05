@@ -37,6 +37,6 @@ def pad_collate_fn(
     for i, (x, y) in enumerate(zip(xs, ys)):
         T = x.shape[1]
         x_padded[i, :, :T] = x
-        y_padded[i, :T] = y
+        y_padded[i, :T] = y.long()
 
     return x_padded, y_padded, lengths
