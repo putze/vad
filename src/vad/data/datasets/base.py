@@ -62,10 +62,7 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
                 f"got {tuple(waveform.shape)} for file: {path}"
             )
 
-        if waveform.shape[0] > 1:
-            waveform = waveform.mean(dim=0)
-        else:
-            waveform = waveform.squeeze(0)
+        waveform = waveform.mean(dim=0) if waveform.shape[0] > 1 else waveform.squeeze(0)
 
         return waveform.float(), sample_rate
 

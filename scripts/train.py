@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import torch
 
@@ -127,7 +128,7 @@ def build_model(device: torch.device) -> CausalVAD:
         BCE-with-logits training.
     """
     model = CausalVAD(n_mels=40)
-    return model.to(device)
+    return cast(CausalVAD, model.to(device))
 
 
 def train() -> None:

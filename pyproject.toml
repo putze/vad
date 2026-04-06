@@ -46,7 +46,7 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I"]
+select = ["E", "F", "W", "I", "SIM"]
 
 [tool.bandit]
 skips = ["B101"]
@@ -68,6 +68,7 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
+exclude = '(^\.github/)'
 
 [[tool.mypy.overrides]]
 module = ["torchaudio"]
