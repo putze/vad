@@ -1,19 +1,19 @@
-from src.vad.visualization.alignment import (
+from .alignment import (
     compute_frame_boundaries,
     compute_frame_labels_from_samples,
     debug_plot_alignment,
     plot_alignment_debug,
 )
-from src.vad.visualization.features import (
+from .features import (
     debug_plot_features_with_label_overlay,
     debug_plot_features_with_labels,
     plot_features_with_label_overlay,
     plot_features_with_labels,
     print_feature_debug_info,
 )
-from src.vad.visualization.labels import plot_label_timeline
-from src.vad.visualization.style import set_plot_style
-from src.vad.visualization.waveform import (
+from .labels import plot_label_timeline
+from .style import set_plot_style
+from .waveform import (
     debug_plot_waveform_with_labels,
     plot_waveform_with_labels,
     print_sample_debug_info,

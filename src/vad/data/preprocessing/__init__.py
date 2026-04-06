@@ -1,7 +1,7 @@
-from src.vad.data.preprocessing.audio import AudioPreprocessor
-from src.vad.data.preprocessing.features import LogMelFeatureExtractor
-from src.vad.data.preprocessing.labels import LabelAligner
-from src.vad.data.preprocessing.preprocessing import VADPreprocessor
+from .audio import AudioPreprocessor
+from .features import LogMelFeatureExtractor
+from .labels import LabelAligner
+from .preprocessing import VADPreprocessor
 
 __all__ = [
     "AudioPreprocessor",
