@@ -10,11 +10,14 @@ from torch import Tensor
 
 def validate_1d_tensor(x: Tensor, name: str) -> None:
     """
-    Validate that a tensor is 1D.
+    Validate that a tensor is one-dimensional.
 
     Args:
-        x (Tensor): Tensor to validate.
-        name (str): Name used in error messages.
+        x: Tensor to validate.
+        name: Tensor name used in error messages.
+
+    Raises:
+        ValueError: If the tensor is not 1D.
     """
     if x.ndim != 1:
         raise ValueError(f"`{name}` must be 1D, got shape {tuple(x.shape)}")
@@ -22,14 +25,38 @@ def validate_1d_tensor(x: Tensor, name: str) -> None:
 
 def validate_2d_tensor(x: Tensor, name: str) -> None:
     """
-    Validate that a tensor is 2D.
+    Validate that a tensor is two-dimensional.
 
     Args:
-        x (Tensor): Tensor to validate.
-        name (str): Name used in error messages.
+        x: Tensor to validate.
+        name: Tensor name used in error messages.
+
+    Raises:
+        ValueError: If the tensor is not 2D.
     """
     if x.ndim != 2:
         raise ValueError(f"`{name}` must be 2D, got shape {tuple(x.shape)}")
+
+
+def validate_equal_length_1d(x: Tensor, y: Tensor, x_name: str, y_name: str) -> None:
+    """
+    Validate that two 1D tensors have the same length.
+
+    Args:
+        x: First tensor.
+        y: Second tensor.
+        x_name: Name of the first tensor.
+        y_name: Name of the second tensor.
+
+    Raises:
+        ValueError: If either tensor is not 1D or their lengths differ.
+    """
+    validate_1d_tensor(x, x_name)
+    validate_1d_tensor(y, y_name)
+    if len(x) != len(y):
+        raise ValueError(
+            f"`{x_name}` and `{y_name}` must have the same length, got {len(x)} and {len(y)}"
+        )
 
 
 def to_numpy_1d(x: Tensor) -> NDArray[np.float32]:
@@ -37,10 +64,10 @@ def to_numpy_1d(x: Tensor) -> NDArray[np.float32]:
     Convert a tensor to a NumPy array.
 
     Args:
-        x (Tensor): Input tensor.
+        x: Input tensor.
 
     Returns:
-        np.ndarray: Detached CPU NumPy array.
+        Detached CPU NumPy array.
     """
     return cast(NDArray[np.float32], x.detach().cpu().numpy())
 
@@ -50,10 +77,10 @@ def to_numpy_2d(x: Tensor) -> NDArray[np.float32]:
     Convert a tensor to a NumPy array.
 
     Args:
-        x (Tensor): Input tensor.
+        x: Input tensor.
 
     Returns:
-        np.ndarray: Detached CPU NumPy array.
+        Detached CPU NumPy array.
     """
     return cast(NDArray[np.float32], x.detach().cpu().numpy())
 
@@ -63,10 +90,10 @@ def binarize_labels(labels: np.ndarray) -> np.ndarray:
     Convert labels to binary values.
 
     Args:
-        labels (np.ndarray): Input label array.
+        labels: Input label array.
 
     Returns:
-        np.ndarray: Binary label array.
+        Binary label array.
     """
     return (labels > 0).astype(np.int32)
 
@@ -82,15 +109,17 @@ def extract_time_slice(
     Extract a time slice from audio and labels.
 
     Args:
-        audio (np.ndarray): Audio waveform.
-        labels (np.ndarray): Label array.
-        sr (int): Sampling rate in Hz.
-        start_s (float | None): Start time in seconds.
-        end_s (float | None): End time in seconds.
+        audio: Audio waveform.
+        labels: Label array aligned with the waveform.
+        sr: Sample rate in Hz.
+        start_s: Start time in seconds.
+        end_s: End time in seconds.
 
     Returns:
-        tuple[np.ndarray, np.ndarray, np.ndarray]:
-            Sliced audio, sliced labels, and time axis.
+        Tuple containing the sliced audio, sliced labels, and time axis.
+
+    Raises:
+        ValueError: If the requested time slice is invalid.
     """
     num_samples = len(audio)
 
@@ -114,13 +143,16 @@ def validate_frame_alignment(
     sequence_name: str = "sequence",
 ) -> None:
     """
-    Validate that a 2D sequence matches frame-level labels.
+    Validate that a sequence matches frame-level labels.
 
     Args:
-        sequence (Tensor): Input sequence with a time dimension.
-        frame_labels (Tensor): Frame-level labels.
-        time_dim (int): Dimension corresponding to frames.
-        sequence_name (str): Name used in error messages.
+        sequence: Input sequence with a frame dimension.
+        frame_labels: Frame-level labels.
+        time_dim: Dimension corresponding to frames.
+        sequence_name: Sequence name used in error messages.
+
+    Raises:
+        ValueError: If the sequence shape is invalid or frame counts differ.
     """
     validate_2d_tensor(sequence, sequence_name)
     validate_1d_tensor(frame_labels, "frame_labels")
@@ -141,14 +173,14 @@ def shade_positive_regions(
     alpha: float = 0.25,
 ) -> None:
     """
-    Shade time regions where labels are positive.
+    Shade waveform regions where labels are positive.
 
     Args:
-        ax (plt.Axes): Target axes.
-        labels (np.ndarray): Binary label array.
-        time (np.ndarray): Time axis in seconds.
-        sr (int): Sampling rate in Hz.
-        alpha (float): Region transparency.
+        ax: Target axes.
+        labels: Binary label array.
+        time: Time axis in seconds.
+        sr: Sample rate in Hz.
+        alpha: Shading transparency.
     """
     if len(labels) == 0:
         return
@@ -179,12 +211,12 @@ def shade_positive_frames(
     alpha: float = 0.25,
 ) -> None:
     """
-    Shade frame regions where labels are positive.
+    Shade frame indices where labels are positive.
 
     Args:
-        ax (plt.Axes): Target axes.
-        labels (np.ndarray): Binary frame-level label array.
-        alpha (float): Region transparency.
+        ax: Target axes.
+        labels: Binary frame-level label array.
+        alpha: Shading transparency.
     """
     if len(labels) == 0:
         return
@@ -202,3 +234,64 @@ def shade_positive_frames(
 
     if in_region:
         ax.axvspan(start_idx - 0.5, len(labels) - 0.5, alpha=alpha)
+
+
+def shade_positive_frame_regions_seconds(
+    ax: plt.Axes,
+    labels: np.ndarray,
+    frame_hop_s: float,
+    alpha: float = 0.25,
+) -> None:
+    """
+    Shade positive frame regions on a time axis.
+
+    Args:
+        ax: Target axes.
+        labels: Binary frame-level label array.
+        frame_hop_s: Frame hop duration in seconds.
+        alpha: Shading transparency.
+    """
+    if len(labels) == 0:
+        return
+
+    in_region = False
+    start_idx = 0
+
+    for i, value in enumerate(labels):
+        if value == 1 and not in_region:
+            in_region = True
+            start_idx = i
+        elif value == 0 and in_region:
+            ax.axvspan(start_idx * frame_hop_s, i * frame_hop_s, alpha=alpha)
+            in_region = False
+
+    if in_region:
+        ax.axvspan(start_idx * frame_hop_s, len(labels) * frame_hop_s, alpha=alpha)
+
+
+def build_waveform_time_axis(num_samples: int, sr: int) -> np.ndarray:
+    """
+    Build a waveform time axis in seconds.
+
+    Args:
+        num_samples: Number of waveform samples.
+        sr: Sample rate in Hz.
+
+    Returns:
+        Time axis in seconds.
+    """
+    return np.arange(num_samples, dtype=np.float32) / float(sr)
+
+
+def build_frame_time_axis(num_frames: int, frame_hop_s: float) -> np.ndarray:
+    """
+    Build a frame time axis in seconds.
+
+    Args:
+        num_frames: Number of frames.
+        frame_hop_s: Frame hop duration in seconds.
+
+    Returns:
+        Time axis in seconds.
+    """
+    return np.arange(num_frames, dtype=np.float32) * float(frame_hop_s)

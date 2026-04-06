@@ -60,6 +60,40 @@ class AudioPreprocessor:
 
         return labels[indices]
 
+    def process_waveform(self, waveform: Tensor, sample_rate: int) -> tuple[Tensor, int]:
+        """
+        Apply preprocessing to a waveform only, without labels.
+
+        Args:
+            waveform: Input mono waveform [T].
+            sample_rate: Original sample rate.
+
+        Returns:
+            tuple[Tensor, int]: Processed waveform [T] and updated sample rate.
+        """
+        if waveform.ndim != 1:
+            raise ValueError(f"`waveform` must be 1D, got shape {tuple(waveform.shape)}")
+
+        if sample_rate <= 0:
+            raise ValueError(f"`sample_rate` must be positive, got {sample_rate}")
+
+        waveform = waveform.float()
+
+        if sample_rate != self.target_sample_rate:
+            waveform = torchaudio.functional.resample(
+                waveform.unsqueeze(0),
+                orig_freq=sample_rate,
+                new_freq=self.target_sample_rate,
+            ).squeeze(0)
+            sample_rate = self.target_sample_rate
+
+        if self.normalize:
+            peak = waveform.abs().max()
+            if peak > 0:
+                waveform = waveform / peak
+
+        return waveform, sample_rate
+
     def __call__(
         self, waveform: Tensor, labels: Tensor, sample_rate: int
     ) -> tuple[Tensor, Tensor, int]:
