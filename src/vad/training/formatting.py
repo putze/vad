@@ -13,10 +13,12 @@ def format_metrics(prefix: str, metrics: BinaryClassificationMetrics) -> str:
         Human-readable summary string.
     """
     return (
-        f"{prefix} | "
+        f"{prefix:<5} | "
         f"loss={metrics.loss:.4f} | "
-        f"acc={metrics.accuracy:.4f} | "
+        f"f1={metrics.f1:.4f} | "
         f"prec={metrics.precision:.4f} | "
         f"rec={metrics.recall:.4f} | "
-        f"f1={metrics.f1:.4f}"
+        f"acc={metrics.accuracy:.4f} | "
+        f"fp_rate={metrics.false_positive_rate:.4f} | "
+        f"fn_rate={metrics.false_negative_rate:.4f}"
     )

@@ -9,7 +9,7 @@ from src.vad.training.metrics import BinaryClassificationMetrics
 
 class TensorBoardLogger:
     """
-    Thin wrapper around PyTorch's SummaryWriter for training logs.
+    Thin wrapper around PyTorch's SummaryWriter for structured training logs.
     """
 
     def __init__(self, log_dir: str | Path = "runs") -> None:
@@ -29,22 +29,38 @@ class TensorBoardLogger:
             train: Training metrics.
             val: Validation metrics.
         """
-        self.writer.add_scalar("loss/train", train.loss, epoch)
-        self.writer.add_scalar("loss/val", val.loss, epoch)
+        # --- Core metrics ---
+        self._log_pair("loss", train.loss, val.loss, epoch)
+        self._log_pair("f1", train.f1, val.f1, epoch)
+        self._log_pair("precision", train.precision, val.precision, epoch)
+        self._log_pair("recall", train.recall, val.recall, epoch)
+        self._log_pair("accuracy", train.accuracy, val.accuracy, epoch)
 
-        self.writer.add_scalar("accuracy/train", train.accuracy, epoch)
-        self.writer.add_scalar("accuracy/val", val.accuracy, epoch)
+        # --- VAD-specific metrics ---
+        self._log_pair(
+            "false_positive_rate", train.false_positive_rate, val.false_positive_rate, epoch
+        )
+        self._log_pair(
+            "false_negative_rate", train.false_negative_rate, val.false_negative_rate, epoch
+        )
 
-        self.writer.add_scalar("precision/train", train.precision, epoch)
-        self.writer.add_scalar("precision/val", val.precision, epoch)
-
-        self.writer.add_scalar("recall/train", train.recall, epoch)
-        self.writer.add_scalar("recall/val", val.recall, epoch)
-
-        self.writer.add_scalar("f1/train", train.f1, epoch)
-        self.writer.add_scalar("f1/val", val.f1, epoch)
+        # --- Confusion matrix counts (validation only, usually more relevant) ---
+        self.writer.add_scalar("confusion/val/tp", val.tp, epoch)
+        self.writer.add_scalar("confusion/val/fp", val.fp, epoch)
+        self.writer.add_scalar("confusion/val/tn", val.tn, epoch)
+        self.writer.add_scalar("confusion/val/fn", val.fn, epoch)
 
         self.writer.flush()
+
+    def _log_pair(self, name: str, train_value: float, val_value: float, step: int) -> None:
+        """
+        Log a train/val scalar pair under a shared namespace.
+
+        Example:
+            name="loss" → loss/train, loss/val
+        """
+        self.writer.add_scalar(f"{name}/train", train_value, step)
+        self.writer.add_scalar(f"{name}/val", val_value, step)
 
     def log_hparams(
         self,
