@@ -5,8 +5,8 @@ import time
 import streamlit as st
 import torch
 
-from app.audio.io import load_audio_from_upload
-from app.components.utils import append_chunk_to_state, chunk_waveform, maybe_resample
+from app.audio.upload import load_audio_from_upload
+from app.components.utils import append_chunk_to_state, chunk_waveform
 from app.plots import (
     plot_streaming_state,
 )
@@ -14,7 +14,6 @@ from app.state import StreamingState
 from src.vad.config import AudioConfig
 from src.vad.inference import StreamingVADInferencer
 from src.vad.inference.streaming import StreamingPrediction
-from src.vad.inference.utils import ensure_mono_waveform
 
 
 def init_streaming_state() -> StreamingState:
@@ -26,14 +25,14 @@ def init_streaming_state() -> StreamingState:
 
 def run_online_inference(
     inferencer: StreamingVADInferencer,
-    waveform: torch.Tensor,
-    sample_rate: int,
+    chunk: torch.Tensor,
     threshold: float,
-) -> StreamingPrediction:
-    """Run offline inference and apply selected threshold if needed."""
-    prediction = inferencer.predict_waveform(waveform, sample_rate)
+) -> StreamingPrediction | None:
+    """Run online inference and apply selected threshold if a prediction is available."""
+    prediction = inferencer.process_chunk(chunk)
+    if prediction is None:
+        return None
 
-    # If your current inferencer already thresholds internally, remove this block.
     prediction.predictions = (prediction.probabilities >= threshold).to(torch.int64)
     return prediction
 
@@ -55,14 +54,9 @@ def render_online_tab(
     uploaded_file = st.file_uploader(
         "Upload audio for simulated streaming", type=["wav", "flac", "mp3"], key="online_uploader"
     )
-    if uploaded_file is None:
-        st.info("Later you can swap this for a microphone recorder component.")
-        return
 
     audio_config = AudioConfig()
-    waveform, sample_rate = load_audio_from_upload(uploaded_file)
-    waveform = ensure_mono_waveform(waveform)
-    waveform, sample_rate = maybe_resample(waveform, sample_rate, audio_config.sample_rate)
+    waveform, sample_rate = load_audio_from_upload(uploaded_file, audio_config.sample_rate)
     chunks = chunk_waveform(waveform, sample_rate, chunk_seconds)
 
     if "streaming_state" not in st.session_state:
@@ -83,7 +77,11 @@ def render_online_tab(
         st.session_state.streaming_state = init_streaming_state()
 
         for chunk in chunks:
-            chunk_prediction = run_online_inference(inferencer, chunk, sample_rate, threshold)
+            for chunk in chunks:
+                chunk_prediction = run_online_inference(inferencer, chunk, threshold)
+            if chunk_prediction is None:
+                continue
+
             append_chunk_to_state(
                 st.session_state.streaming_state,
                 chunk,

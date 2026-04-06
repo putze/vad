@@ -10,6 +10,7 @@ from app.components.online import render_online_tab
 from app.sidebar import sidebar
 from src.vad.config import AudioConfig
 from src.vad.inference import OfflineVADInferencer
+from src.vad.inference.streaming import StreamingVADInferencer
 
 APP_TITLE = "Voice Activity Detection Demo"
 
@@ -38,19 +39,17 @@ def create_inferencer(
 def create_streaming_inferencer(
     checkpoint_path: str,
     device_str: str = "cpu",
-) -> OfflineVADInferencer:
+) -> StreamingVADInferencer:
     """Create and cache the inferencer used by the online tab.
 
     The current online tab simulates streaming by sending successive chunks
     through the same inferencer.
     """
-    device = torch.device(device_str)
-
     audio_config = AudioConfig()
 
-    return OfflineVADInferencer(
+    return StreamingVADInferencer(
         checkpoint_path=checkpoint_path,
-        device=device,
+        device=torch.device(device_str),
         target_sample_rate=audio_config.sample_rate,
         n_mels=40,
         frame_length_ms=audio_config.frame_length_ms,

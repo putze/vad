@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-import torchaudio
 from torch import Tensor
 
 from app.state import StreamingState
+from src.vad.data.utils import ensure_mono_waveform
 from src.vad.inference.offline import OfflineVADPrediction
-from src.vad.inference.utils import ensure_mono_waveform
+from src.vad.inference.streaming import StreamingPrediction
 
 
 def chunk_waveform(
@@ -40,7 +40,7 @@ def append_chunk_to_state(
     state: StreamingState,
     chunk_waveform: torch.Tensor,
     sample_rate: int,
-    chunk_prediction: OfflineVADPrediction,
+    chunk_prediction: OfflineVADPrediction | StreamingPrediction,
     max_window_seconds: float,
 ) -> None:
     """Append a chunk result and keep only the last max_window_seconds."""
@@ -77,13 +77,3 @@ def append_chunk_to_state(
     state.times = [t for t, keep in zip(state.times, pred_mask) if keep]
     state.probabilities = [v for v, keep in zip(state.probabilities, pred_mask) if keep]
     state.predictions = [v for v, keep in zip(state.predictions, pred_mask) if keep]
-
-
-def maybe_resample(
-    waveform: torch.Tensor, sample_rate: int, target_sample_rate: int
-) -> tuple[torch.Tensor, int]:
-    """Resample waveform if needed."""
-    if sample_rate == target_sample_rate:
-        return waveform, sample_rate
-    resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=target_sample_rate)
-    return resampler(waveform), target_sample_rate

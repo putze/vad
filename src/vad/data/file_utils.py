@@ -3,6 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable
 
+import torchaudio
+from torch import Tensor
+
+from src.vad.data.utils import ensure_mono_waveform
+
 
 def is_audio_file(path: Path, extensions: tuple[str, ...]) -> bool:
     """
@@ -67,3 +72,40 @@ def match_audio_label_pairs(
             missing += 1
 
     return pairs, missing
+
+
+def load_audio(
+    path: str | Path,
+) -> tuple[Tensor, int]:
+    """
+    Load an audio file and return a mono waveform.
+
+    Args:
+        path: Path to the audio file.
+
+    Returns:
+        waveform: Mono waveform of shape [N].
+        sample_rate: Sample rate in Hz.
+
+    Raises:
+        RuntimeError: If loading fails.
+        ValueError: If the waveform shape is invalid.
+    """
+    path = Path(path)
+
+    try:
+        waveform, sample_rate = torchaudio.load(str(path))
+    except Exception as e:
+        raise RuntimeError(f"Failed to load audio file: {path}") from e
+
+    # Expect [channels, time]
+    if waveform.ndim != 2:
+        raise ValueError(
+            f"Expected waveform shape [channels, time], "
+            f"got {tuple(waveform.shape)} for file: {path}"
+        )
+
+    # Convert to mono
+    waveform = ensure_mono_waveform(waveform)
+
+    return waveform, sample_rate

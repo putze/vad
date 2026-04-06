@@ -6,9 +6,10 @@ from typing import Generic, Protocol, Sequence, TypeVar
 
 import numpy as np
 import torch
-import torchaudio
 from torch import Tensor
 from torch.utils.data import Dataset
+
+from src.vad.data.file_utils import load_audio
 
 
 class VADSampleProtocol(Protocol):
@@ -40,31 +41,6 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
     def __len__(self) -> int:
         """Return the number of samples in the dataset."""
         return len(self.samples)
-
-    def _load_audio(self, path: Path) -> tuple[Tensor, int]:
-        """
-        Load an audio file as a mono waveform.
-
-        Args:
-            path (Path): Path to audio file.
-
-        Returns:
-            tuple[Tensor, int]: Waveform tensor [T] and sample rate.
-        """
-        try:
-            waveform, sample_rate = torchaudio.load(str(path))
-        except Exception as e:
-            raise RuntimeError(f"Failed to load audio file: {path}") from e
-
-        if waveform.ndim != 2:
-            raise ValueError(
-                f"Expected audio tensor with shape [channels, time], "
-                f"got {tuple(waveform.shape)} for file: {path}"
-            )
-
-        waveform = waveform.mean(dim=0) if waveform.shape[0] > 1 else waveform.squeeze(0)
-
-        return waveform.float(), sample_rate
 
     def _load_labels(self, path: Path) -> Tensor:
         """
@@ -102,7 +78,7 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
         """
         sample = self.samples[index]
 
-        waveform, sample_rate = self._load_audio(sample.audio_path)
+        waveform, sample_rate = load_audio(sample.audio_path)
         labels = self._load_labels(sample.label_path)
 
         waveform_len = waveform.shape[0]

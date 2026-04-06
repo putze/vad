@@ -4,8 +4,7 @@ import pandas as pd
 import streamlit as st
 import torch
 
-from app.audio.io import load_audio_from_upload
-from app.components.utils import maybe_resample
+from app.audio.upload import load_audio_from_upload
 from app.plots import (
     plot_overview,
     plot_predictions,
@@ -15,7 +14,6 @@ from app.plots import (
 from src.vad.config import AudioConfig
 from src.vad.inference import OfflineVADInferencer
 from src.vad.inference.offline import OfflineVADPrediction
-from src.vad.inference.utils import ensure_mono_waveform
 
 
 def run_offline_inference(
@@ -59,9 +57,7 @@ def render_offline_tab(inferencer: OfflineVADInferencer, threshold: float) -> No
     file_bytes = uploaded_file.getvalue()
     st.audio(file_bytes)
 
-    waveform, sample_rate = load_audio_from_upload(uploaded_file)
-    waveform = ensure_mono_waveform(waveform)
-    waveform, sample_rate = maybe_resample(waveform, sample_rate, audio_config.sample_rate)
+    waveform, sample_rate = load_audio_from_upload(uploaded_file, audio_config.sample_rate)
 
     with st.spinner("Running offline inference..."):
         prediction = run_offline_inference(inferencer, waveform, sample_rate, threshold)

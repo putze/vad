@@ -25,6 +25,30 @@ class AudioPreprocessor:
 
         self.target_sample_rate = target_sample_rate
         self.normalize = normalize
+        self._resamplers: dict[int, torchaudio.transforms.Resample] = {}
+
+    def _get_resampler(self, sample_rate: int) -> torchaudio.transforms.Resample:
+        """
+        Return a cached resampler from `sample_rate` to `target_sample_rate`.
+        """
+        if sample_rate <= 0:
+            raise ValueError(f"`sample_rate` must be positive, got {sample_rate}")
+
+        if sample_rate == self.target_sample_rate:
+            raise ValueError(
+                "_get_resampler should not be called when sample_rate "
+                "already matches target_sample_rate"
+            )
+
+        resampler = self._resamplers.get(sample_rate)
+        if resampler is None:
+            resampler = torchaudio.transforms.Resample(
+                orig_freq=sample_rate,
+                new_freq=self.target_sample_rate,
+            )
+            self._resamplers[sample_rate] = resampler
+
+        return resampler
 
     def _resize_labels(self, labels: Tensor, new_length: int) -> Tensor:
         """
@@ -57,8 +81,40 @@ class AudioPreprocessor:
             device=labels.device,
         )
         indices = indices.round().long().clamp(0, old_length - 1)
-
         return labels[indices]
+
+    def _resample_waveform(self, waveform: Tensor, sample_rate: int) -> tuple[Tensor, int]:
+        """
+        Resample a mono waveform if needed.
+        """
+        if sample_rate == self.target_sample_rate:
+            return waveform, sample_rate
+
+        original_length = waveform.shape[0]
+        resampler = self._get_resampler(sample_rate)
+
+        waveform = resampler(waveform.unsqueeze(0)).squeeze(0)
+
+        new_length = waveform.shape[0]
+        if new_length <= 0:
+            raise ValueError(
+                "Resampling produced an invalid waveform length: "
+                f"{new_length} from original length {original_length}"
+            )
+
+        return waveform, self.target_sample_rate
+
+    def _normalize_waveform(self, waveform: Tensor) -> Tensor:
+        """
+        Peak-normalize a waveform if enabled.
+        """
+        if not self.normalize:
+            return waveform
+
+        peak = waveform.abs().max()
+        if peak > 0:
+            waveform = waveform / peak
+        return waveform
 
     def process_waveform(self, waveform: Tensor, sample_rate: int) -> tuple[Tensor, int]:
         """
@@ -78,19 +134,8 @@ class AudioPreprocessor:
             raise ValueError(f"`sample_rate` must be positive, got {sample_rate}")
 
         waveform = waveform.float()
-
-        if sample_rate != self.target_sample_rate:
-            waveform = torchaudio.functional.resample(
-                waveform.unsqueeze(0),
-                orig_freq=sample_rate,
-                new_freq=self.target_sample_rate,
-            ).squeeze(0)
-            sample_rate = self.target_sample_rate
-
-        if self.normalize:
-            peak = waveform.abs().max()
-            if peak > 0:
-                waveform = waveform / peak
+        waveform, sample_rate = self._resample_waveform(waveform, sample_rate)
+        waveform = self._normalize_waveform(waveform)
 
         return waveform, sample_rate
 
@@ -127,30 +172,13 @@ class AudioPreprocessor:
         waveform = waveform.float()
         labels = labels.float()
 
-        if sample_rate != self.target_sample_rate:
-            original_length = waveform.shape[0]
+        original_length = waveform.shape[0]
+        waveform, sample_rate = self._resample_waveform(waveform, sample_rate)
 
-            waveform = torchaudio.functional.resample(
-                waveform.unsqueeze(0),
-                orig_freq=sample_rate,
-                new_freq=self.target_sample_rate,
-            ).squeeze(0)
+        if waveform.shape[0] != original_length:
+            labels = self._resize_labels(labels, waveform.shape[0])
 
-            new_length = waveform.shape[0]
-
-            if new_length <= 0:
-                raise ValueError(
-                    "Resampling produced an invalid waveform length: "
-                    f"{new_length} from original length {original_length}"
-                )
-
-            labels = self._resize_labels(labels, new_length)
-            sample_rate = self.target_sample_rate
-
-        if self.normalize:
-            peak = waveform.abs().max()
-            if peak > 0:
-                waveform = waveform / peak
+        waveform = self._normalize_waveform(waveform)
 
         if waveform.shape[0] != labels.shape[0]:
             raise ValueError(
