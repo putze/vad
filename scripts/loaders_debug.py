@@ -4,10 +4,11 @@ from typing import Any
 
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 import src.vad.data.preprocessing
 from src.vad.data.build import LibriVADConfig, build_processed_datasets, build_raw_datasets
+from src.vad.data.datasets import BaseVADDataset, ProcessedVADDataset
 from src.vad.data.loaders import DataLoaderConfig, build_dataloaders
 
 
@@ -57,7 +58,7 @@ def describe_tensor(name: str, x: Tensor) -> None:
     print()
 
 
-def inspect_raw_dataset(dataset_name: str, dataset: Dataset) -> None:
+def inspect_raw_dataset(dataset_name: str, dataset: BaseVADDataset) -> None:
     """
     Inspect one sample from a raw dataset.
     """
@@ -79,7 +80,7 @@ def inspect_raw_dataset(dataset_name: str, dataset: Dataset) -> None:
     print()
 
 
-def inspect_processed_dataset(dataset_name: str, dataset: Dataset) -> None:
+def inspect_processed_dataset(dataset_name: str, dataset: ProcessedVADDataset) -> None:
     """
     Inspect one sample from a processed dataset.
     """
@@ -266,9 +267,9 @@ def build_processor(config: DebugConfig) -> src.vad.data.preprocessing.VADPrepro
 
 
 def run_raw_dataset_checks(
-    train_raw: Dataset,
-    val_raw: Dataset,
-    test_raw: Dataset,
+    train_raw: BaseVADDataset,
+    val_raw: BaseVADDataset,
+    test_raw: BaseVADDataset,
 ) -> None:
     """
     Run inspection checks on raw datasets.
@@ -280,9 +281,9 @@ def run_raw_dataset_checks(
 
 
 def run_processed_dataset_checks(
-    train_dataset: Dataset,
-    val_dataset: Dataset,
-    test_dataset: Dataset,
+    train_dataset: ProcessedVADDataset,
+    val_dataset: ProcessedVADDataset,
+    test_dataset: ProcessedVADDataset,
 ) -> None:
     """
     Run inspection checks on processed datasets.

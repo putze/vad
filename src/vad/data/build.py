@@ -2,10 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
-from torch.utils.data import Dataset
-
-from src.vad.data.datasets.librivad import LibriVADDataset
-from src.vad.data.datasets.processed import ProcessedVADDataset
+from src.vad.data.datasets import BaseVADDataset, LibriVADDataset, ProcessedVADDataset
 from src.vad.data.preprocessing import VADPreprocessor
 
 
@@ -23,10 +20,10 @@ class LibriVADConfig:
 
 
 DatasetConfig = LibriVADConfig
-DatasetBuilder = Callable[[DatasetConfig], Dataset]
+DatasetBuilder = Callable[[DatasetConfig], BaseVADDataset]
 
 
-def _build_librivad(config: LibriVADConfig) -> Dataset:
+def _build_librivad(config: LibriVADConfig) -> BaseVADDataset:
     """
     Build a LibriVAD dataset from its configuration.
     """
@@ -61,7 +58,7 @@ def get_dataset_builder(dataset_name: str) -> DatasetBuilder:
 def build_raw_dataset(
     dataset_name: str,
     config: DatasetConfig,
-) -> Dataset:
+) -> BaseVADDataset:
     """
     Build a raw dataset from a name and configuration.
     """
@@ -92,7 +89,7 @@ def build_raw_datasets(
     train_config: DatasetConfig,
     val_config: DatasetConfig,
     test_config: DatasetConfig,
-) -> tuple[Dataset, Dataset, Dataset]:
+) -> tuple[BaseVADDataset, BaseVADDataset, BaseVADDataset]:
     """
     Build raw train, validation, and test datasets.
     """

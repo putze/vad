@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import torch
 
 from src.vad.inference import OfflineVADInferencer, predictions_to_segments
+from src.vad.inference.offline import OfflineVADPrediction
 from src.vad.visualization.inference import plot_offline_vad_prediction
 
 
@@ -81,7 +82,7 @@ def save_csv(
 
 def save_prediction_plot(
     output_path: Path,
-    prediction: object,
+    prediction: OfflineVADPrediction,
     sample_rate: int,
     threshold: float,
     audio_name: str,
