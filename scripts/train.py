@@ -140,8 +140,9 @@ def train() -> None:
     results_root = Path("/Users/antje/Blynt/LibriVAD/Results")
     labels_root = Path("/Users/antje/Blynt/LibriVAD/Files/Labels")
 
-    log_dir = Path("runs/causal_conv")
-    checkpoint_path = Path("checkpoints/best_causal_vad.pt")
+    log_dir = Path("runs")
+    experiment_name = "causal_conv"
+    checkpoint_path = Path("checkpoints")
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     processor = build_preprocessor()
@@ -165,8 +166,9 @@ def train() -> None:
         val_loader=val_loader,
         optimizer=optimizer,
         device=device,
-        num_epochs=3,
+        num_epochs=2,
         log_dir=log_dir,
+        experiment_name=experiment_name,
         checkpoint_path=checkpoint_path,
     )
 

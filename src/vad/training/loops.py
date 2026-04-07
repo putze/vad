@@ -9,12 +9,13 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from src.vad.training.callbacks import (
-    BestModelTracker,
     EarlyStopping,
 )
+from src.vad.training.checkpoint_manager import CheckpointManager
 from src.vad.training.formatting import format_metrics
 from src.vad.training.logger import TensorBoardLogger
 from src.vad.training.metrics import BinaryClassificationMetrics, VADMetricsTracker
+from src.vad.training.run_config import ExperimentPaths
 
 
 def make_padding_mask(lengths: Tensor, max_len: int) -> Tensor:
@@ -173,7 +174,8 @@ def train_model(
     device: torch.device,
     num_epochs: int,
     log_dir: str | Path = "runs/vad",
-    checkpoint_path: str | Path = "best_model.pt",
+    experiment_name: str = "causal_conv",
+    checkpoint_path: str | Path = "checkpoints",
 ) -> None:
     """
     Full training loop with TensorBoard logging.
@@ -190,11 +192,14 @@ def train_model(
     """
     model.to(device)
 
-    logger = TensorBoardLogger(log_dir)
-    best_model = BestModelTracker(mode="max")
+    experiment = ExperimentPaths.create(
+        log_root=log_dir, experiment_name=experiment_name, checkpoint_root=checkpoint_path
+    )
+    logger = TensorBoardLogger(experiment.log_dir)
+    checkpoint_manager = CheckpointManager(
+        checkpoint_dir=experiment.checkpoint_dir, monitor="val_f1", mode="max"
+    )
     early_stopping = EarlyStopping(patience=5, mode="min")
-
-    checkpoint_path = Path(checkpoint_path)
 
     try:
         for epoch in range(1, num_epochs + 1):
@@ -226,10 +231,22 @@ def train_model(
             print(format_metrics("train", train_metrics))
             print(format_metrics("val  ", val_metrics))
 
-            # Best model (based on F1)
-            if best_model.update(epoch, val_metrics.f1):
-                torch.save(model.state_dict(), checkpoint_path)
-                print(f"Saved best model at epoch {epoch}")
+            # Last and best model (based on F1)
+            metrics = {
+                "train_loss": train_metrics.loss,
+                "train_f1": train_metrics.f1,
+                "val_loss": val_metrics.loss,
+                "val_f1": val_metrics.f1,
+                "val_accuracy": val_metrics.accuracy,
+            }
+            improved = checkpoint_manager.step(
+                epoch=epoch, model=model, optimizer=optimizer, metrics=metrics
+            )
+            if improved:
+                print(
+                    f"""Saved new best checkpoint with
+                    {checkpoint_manager.monitor}={metrics[checkpoint_manager.monitor]:.4f}"""
+                )
 
             # Early stopping (based on loss)
             if early_stopping.step(val_metrics.loss):

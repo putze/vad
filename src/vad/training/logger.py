@@ -12,7 +12,10 @@ class TensorBoardLogger:
     Thin wrapper around PyTorch's SummaryWriter for structured training logs.
     """
 
-    def __init__(self, log_dir: str | Path = "runs") -> None:
+    def __init__(
+        self,
+        log_dir: str | Path = "runs",
+    ) -> None:
         self.writer = SummaryWriter(log_dir=str(log_dir))
 
     def log_epoch(
