@@ -4,13 +4,14 @@ import argparse
 from pathlib import Path
 
 import torch
-import torchaudio
 from torch import Tensor
 
+from src.vad.data.file_utils import load_audio
 from src.vad.data.preprocessing import AudioPreprocessor, LogMelFeatureExtractor
+from src.vad.data.utils import ensure_mono_waveform
 from src.vad.inference.streaming import StreamingVADInferencer
-from src.vad.inference.utils import ensure_mono_waveform, ensure_time_major_features
-from src.vad.models import CausalVAD
+from src.vad.inference.utils import ensure_time_major_features
+from src.vad.models.loading import load_model
 
 
 class StreamingFeatureExtractorAdapter:
@@ -127,48 +128,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_model(
-    checkpoint_path: Path,
-    device: torch.device,
-    n_mels: int,
-) -> CausalVAD:
-    """
-    Load a trained :class:`CausalVAD` checkpoint.
-
-    Supports a raw state dict or a checkpoint containing
-    ``model_state_dict``.
-
-    Args:
-        checkpoint_path: Path to the checkpoint file.
-        device: Torch device used for inference.
-        n_mels: Number of mel bins expected by the model.
-
-    Returns:
-        Loaded model in evaluation mode.
-    """
-    model = CausalVAD(n_mels=n_mels)
-
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    state_dict = (
-        checkpoint["model_state_dict"]
-        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint
-        else checkpoint
-    )
-
-    model.load_state_dict(state_dict)
-    model.to(device)
-    model.eval()
-    return model
-
-
 def main() -> None:
     """Run simulated streaming VAD on an audio file."""
     args = parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    waveform, sample_rate = torchaudio.load(str(args.audio))
-    waveform = ensure_mono_waveform(waveform)
+    waveform, sample_rate = load_audio(str(args.audio))
 
     model = load_model(
         checkpoint_path=args.checkpoint,

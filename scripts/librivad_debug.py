@@ -6,6 +6,7 @@ from pathlib import Path
 from torch import Tensor
 
 from src.vad.data.datasets.librivad import LibriVADDataset
+from src.vad.data.file_utils import load_audio
 from src.vad.data.preprocessing import (
     AudioPreprocessor,
     LabelAligner,
@@ -85,7 +86,7 @@ class LibriVADDebugger:
         idx = self.config.sample_index if index is None else index
         sample = self.dataset.samples[idx]
 
-        waveform, sample_rate = self.dataset._load_audio(sample.audio_path)
+        waveform, sample_rate = load_audio(sample.audio_path)
         labels = self.dataset._load_labels(sample.label_path)
 
         return waveform, labels, sample_rate
