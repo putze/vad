@@ -26,7 +26,6 @@ class BinaryClassificationMetrics:
         f1: Harmonic mean of precision and recall.
         false_positive_rate: FP / (FP + TN).
         false_negative_rate: FN / (FN + TP).
-        miss_rate: Alias for false_negative_rate.
         tp: Number of true positives.
         fp: Number of false positives.
         tn: Number of true negatives.
@@ -41,7 +40,6 @@ class BinaryClassificationMetrics:
     f1: float
     false_positive_rate: float
     false_negative_rate: float
-    miss_rate: float
     tp: int
     fp: int
     tn: int
@@ -59,7 +57,6 @@ class BinaryClassificationMetrics:
             f1=0.0,
             false_positive_rate=0.0,
             false_negative_rate=0.0,
-            miss_rate=0.0,
             tp=0,
             fp=0,
             tn=0,
@@ -190,7 +187,6 @@ class VADMetricsTracker:
             f1=float(self.f1.compute().item()),
             false_positive_rate=false_positive_rate,
             false_negative_rate=false_negative_rate,
-            miss_rate=false_negative_rate,
             tp=tp,
             fp=fp,
             tn=tn,

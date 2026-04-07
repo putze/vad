@@ -38,4 +38,4 @@ training.metrics module
 .. automodule:: vad.training.metrics
    :members:
    :show-inheritance:
-   :exclude-members: accuracy, f1, false_negative_rate, false_positive_rate, fn, fp, loss, miss_rate, num_frames, precision, recall, tn, tp
+   :exclude-members: accuracy, f1, false_negative_rate, false_positive_rate, fn, fp, loss, num_frames, precision, recall, tn, tp
