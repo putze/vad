@@ -7,7 +7,7 @@ requires-python = ">=3.10,<3.15"
 license = { text = "MIT" }
 authors = [{ name = "Antje Farnier" }]
 dependencies = [
-    "numpy>=1.26",
+    "numpy>=1.26,<2",
     "torch==2.2.2",
     "torchaudio==2.2.2",
     "torchmetrics>=1.9",
