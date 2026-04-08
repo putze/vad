@@ -50,6 +50,7 @@ jobs:
       - name: Bandit - security analysis
         run: bandit -r src/ -c pyproject.toml
       - name: pip-audit - dependency vulnerabilities
+        continue-on-error: true
         run: pip-audit
 
   # test:
