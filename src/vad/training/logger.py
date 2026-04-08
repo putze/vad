@@ -4,7 +4,7 @@ from pathlib import Path
 
 from torch.utils.tensorboard import SummaryWriter
 
-from src.vad.training.metrics import BinaryClassificationMetrics
+from vad.training.metrics import BinaryClassificationMetrics
 
 
 class TensorBoardLogger:

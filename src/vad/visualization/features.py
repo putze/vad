@@ -4,13 +4,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch import Tensor
 
-from src.vad.visualization.helpers import (
+from vad.visualization.helpers import (
     shade_positive_frames,
     to_numpy_1d,
     to_numpy_2d,
     validate_frame_alignment,
 )
-from src.vad.visualization.style import set_plot_style
+from vad.visualization.style import set_plot_style
 
 
 def print_feature_debug_info(

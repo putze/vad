@@ -5,9 +5,9 @@ import plotly.graph_objects as go
 import torch
 from plotly.subplots import make_subplots
 
-from app.state import StreamingState
-from src.vad.data.utils import ensure_mono_waveform
-from src.vad.inference import OfflineVADPrediction
+from vad.app.state import StreamingState
+from vad.data.utils import ensure_mono_waveform
+from vad.inference import OfflineVADPrediction
 
 
 def plot_waveform(waveform: torch.Tensor, sample_rate: int) -> go.Figure:

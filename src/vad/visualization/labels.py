@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch import Tensor
 
-from src.vad.visualization.helpers import (
+from vad.visualization.helpers import (
     binarize_labels,
     extract_time_slice,
     to_numpy_1d,

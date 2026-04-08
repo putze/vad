@@ -1,18 +1,24 @@
 [project]
 name = "vad"
 version = "0.1.0"
+description = "Voice activity detection project with training, evaluation, baselines, and demo."
 readme = "README.md"
 requires-python = ">=3.10,<3.15"
-license = {text = "MIT"}
-authors = [{name="Antje Farnier"},]
-dependencies = ["numba (==0.58.1)"]
-
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+license = { text = "MIT" }
+authors = [{ name = "Antje Farnier" }]
+dependencies = [
+    "numpy>=1.26",
+    "torch==2.2.2",
+    "torchaudio==2.2.2",
+    "torchmetrics>=1.9",
+    "tqdm>=4.67",
+    "tensorboard>=2.20",
+    "webrtcvad>=2.0.10",
+]
 
 [project.optional-dependencies]
 dev = [
+    "build>=1.2",
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "black>=23.0.0",
@@ -28,10 +34,26 @@ docs = [
     "furo>=2024.1.29",
     "myst-parser>=2.0.0",
 ]
+demo = [
+    "streamlit>=1.56",
+    "matplotlib>=3.10",
+    "plotly>=6.0",
+    "pandas>=2.0",
+]
+
+[project.scripts]
+vad-train = "vad.cli.train:main"
+vad-infer-offline = "vad.cli.infer_offline_file:main"
+vad-stream-file = "vad.cli.stream_file:main"
+vad-compare-models = "vad.cli.compare_models:main"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=src/vad --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=vad --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "unit: fast, isolated unit tests",
     "integration: tests that wire multiple components together",
@@ -39,7 +61,7 @@ markers = [
 
 [tool.black]
 line-length = 100
-target-version = ['py310']
+target-version = ["py310"]
 
 [tool.ruff]
 line-length = 100
@@ -68,8 +90,8 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
-exclude = '(^\.github/)'
+exclude = "(^\\.github/)"
 
 [[tool.mypy.overrides]]
-module = ["torchaudio"]
+module = ["torchaudio", "webrtcvad", "plotly.*"]
 ignore_missing_imports = true

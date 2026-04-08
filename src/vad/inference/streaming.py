@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor, nn
 
-from src.vad.inference.utils import (
+from vad.inference.utils import (
     FeatureExtractorProtocol,
     logits_to_predictions,
     normalize_binary_logits,

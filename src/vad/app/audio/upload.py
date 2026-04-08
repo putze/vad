@@ -5,8 +5,8 @@ from pathlib import Path
 
 import torch
 
-from src.vad.data.file_utils import load_audio
-from src.vad.data.preprocessing.audio import AudioPreprocessor
+from vad.data.file_utils import load_audio
+from vad.data.preprocessing.audio import AudioPreprocessor
 
 
 def load_audio_from_upload(uploaded_file, target_sample_rate=None) -> tuple[torch.Tensor, int]:

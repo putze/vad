@@ -5,15 +5,15 @@ import time
 import streamlit as st
 import torch
 
-from app.audio.upload import load_audio_from_upload
-from app.components.utils import append_chunk_to_state, chunk_waveform
-from app.plots import (
+from vad.app.audio.upload import load_audio_from_upload
+from vad.app.components.utils import append_chunk_to_state, chunk_waveform
+from vad.app.plots import (
     plot_streaming_state,
 )
-from app.state import StreamingState
-from src.vad.config import AudioConfig
-from src.vad.inference import StreamingVADInferencer
-from src.vad.inference.streaming import StreamingPrediction
+from vad.app.state import StreamingState
+from vad.config import AudioConfig
+from vad.inference import StreamingVADInferencer
+from vad.inference.streaming import StreamingPrediction
 
 
 def init_streaming_state() -> StreamingState:

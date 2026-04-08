@@ -6,7 +6,7 @@ from typing import Iterable
 import torchaudio
 from torch import Tensor
 
-from src.vad.data.utils import ensure_mono_waveform
+from vad.data.utils import ensure_mono_waveform
 
 
 def is_audio_file(path: Path, extensions: tuple[str, ...]) -> bool:

@@ -5,9 +5,8 @@ from dataclasses import dataclass, field
 import torch
 import webrtcvad
 from torch import Tensor
-
-from src.vad.data.preprocessing.audio import AudioPreprocessor
-from src.vad.data.utils import ensure_mono_waveform
+from vad.data.preprocessing.audio import AudioPreprocessor
+from vad.data.utils import ensure_mono_waveform
 
 
 @dataclass(slots=True)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.vad.config import InferenceConfig, StreamingConfig
+from vad.config import InferenceConfig, StreamingConfig
 
 
 def sidebar() -> tuple[str, str, float, float, float]:

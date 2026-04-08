@@ -5,13 +5,12 @@ from pathlib import Path
 
 import torch
 from torch import Tensor
-
-from src.vad.data.file_utils import load_audio
-from src.vad.data.preprocessing import AudioPreprocessor, LogMelFeatureExtractor
-from src.vad.data.utils import ensure_mono_waveform
-from src.vad.inference.streaming import StreamingVADInferencer
-from src.vad.inference.utils import ensure_time_major_features
-from src.vad.models.loading import load_model
+from vad.data.file_utils import load_audio
+from vad.data.preprocessing import AudioPreprocessor, LogMelFeatureExtractor
+from vad.data.utils import ensure_mono_waveform
+from vad.inference.streaming import StreamingVADInferencer
+from vad.inference.utils import ensure_time_major_features
+from vad.models.loading import load_model
 
 
 class StreamingFeatureExtractorAdapter:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import torch
 
-from src.vad.models import CausalVAD
+from vad.models import CausalVAD
 
 
 def load_model(

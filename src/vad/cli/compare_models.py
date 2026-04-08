@@ -4,11 +4,10 @@ import argparse
 from pathlib import Path
 
 import torch
-
-from src.vad.baseline.webrtc import WebRTCVADBaseline
-from src.vad.data import DatasetConfig, build_raw_dataset
-from src.vad.evaluate.evaluate import evaluate_model
-from src.vad.inference import OfflineVADInferencer
+from vad.baseline.webrtc import WebRTCVADBaseline
+from vad.data import DatasetConfig, build_raw_dataset
+from vad.evaluate.evaluate import evaluate_model
+from vad.inference import OfflineVADInferencer
 
 
 def print_comparison(

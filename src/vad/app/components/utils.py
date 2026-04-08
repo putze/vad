@@ -4,10 +4,10 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from app.state import StreamingState
-from src.vad.data.utils import ensure_mono_waveform
-from src.vad.inference.offline import OfflineVADPrediction
-from src.vad.inference.streaming import StreamingPrediction
+from vad.app.state import StreamingState
+from vad.data.utils import ensure_mono_waveform
+from vad.inference.offline import OfflineVADPrediction
+from vad.inference.streaming import StreamingPrediction
 
 
 def chunk_waveform(

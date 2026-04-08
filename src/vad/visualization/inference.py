@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch import Tensor
 
-from src.vad.data.utils import ensure_mono_waveform
-from src.vad.visualization.style import set_plot_style
+from vad.data.utils import ensure_mono_waveform
+from vad.visualization.style import set_plot_style
 
 
 def plot_offline_vad_prediction(

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from torch import Tensor
 
-from src.vad.data.preprocessing.audio import AudioPreprocessor
-from src.vad.data.preprocessing.features import LogMelFeatureExtractor
-from src.vad.data.preprocessing.labels import LabelAligner
+from vad.data.preprocessing.audio import AudioPreprocessor
+from vad.data.preprocessing.features import LogMelFeatureExtractor
+from vad.data.preprocessing.labels import LabelAligner
 
 
 class VADPreprocessor:

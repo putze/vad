@@ -8,14 +8,14 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from src.vad.training.callbacks import (
+from vad.training.callbacks import (
     EarlyStopping,
 )
-from src.vad.training.checkpoint_manager import CheckpointManager
-from src.vad.training.formatting import format_metrics
-from src.vad.training.logger import TensorBoardLogger
-from src.vad.training.metrics import BinaryClassificationMetrics, VADMetricsTracker
-from src.vad.training.run_config import ExperimentPaths
+from vad.training.checkpoint_manager import CheckpointManager
+from vad.training.formatting import format_metrics
+from vad.training.logger import TensorBoardLogger
+from vad.training.metrics import BinaryClassificationMetrics, VADMetricsTracker
+from vad.training.run_config import ExperimentPaths
 
 
 def make_padding_mask(lengths: Tensor, max_len: int) -> Tensor:

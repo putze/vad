@@ -4,9 +4,9 @@ import warnings
 from pathlib import Path
 from typing import List, Sequence
 
-from src.vad.data.datasets.base import BaseVADDataset
-from src.vad.data.file_utils import iter_audio_files
-from src.vad.data.samples import AudioSample
+from vad.data.datasets.base import BaseVADDataset
+from vad.data.file_utils import iter_audio_files
+from vad.data.samples import AudioSample
 
 
 class LibriVADDataset(BaseVADDataset[AudioSample]):

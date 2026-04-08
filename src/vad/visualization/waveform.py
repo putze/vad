@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 import torch
 from torch import Tensor
 
-from src.vad.visualization.helpers import (
+from vad.visualization.helpers import (
     binarize_labels,
     extract_time_slice,
     shade_positive_regions,
     to_numpy_1d,
     validate_1d_tensor,
 )
-from src.vad.visualization.style import set_plot_style
+from vad.visualization.style import set_plot_style
 
 
 def plot_waveform_with_labels(

@@ -1,4 +1,4 @@
-from src.vad.training.metrics import BinaryClassificationMetrics
+from vad.training.metrics import BinaryClassificationMetrics
 
 
 def format_metrics(prefix: str, metrics: BinaryClassificationMetrics) -> str:

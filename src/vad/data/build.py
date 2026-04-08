@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
-from src.vad.data.datasets import BaseVADDataset, LibriVADDataset, ProcessedVADDataset
-from src.vad.data.preprocessing import VADPreprocessor
+from vad.data.datasets import BaseVADDataset, LibriVADDataset, ProcessedVADDataset
+from vad.data.preprocessing import VADPreprocessor
 
 
 @dataclass(slots=True)

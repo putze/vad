@@ -9,7 +9,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from src.vad.data.file_utils import load_audio
+from vad.data.file_utils import load_audio
 
 
 class VADSampleProtocol(Protocol):

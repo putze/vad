@@ -2,9 +2,9 @@ from dataclasses import dataclass
 
 from torch.utils.data import DataLoader, Dataset
 
-from src.vad.data.collate import pad_collate_fn
-from src.vad.data.datasets.processed import ProcessedVADDataset
-from src.vad.data.preprocessing import VADPreprocessor
+from vad.data.collate import pad_collate_fn
+from vad.data.datasets.processed import ProcessedVADDataset
+from vad.data.preprocessing import VADPreprocessor
 
 
 @dataclass(slots=True)

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from src.vad.data.preprocessing import LabelAligner
-from src.vad.evaluate.metrics import binary_metrics
+from vad.data.preprocessing import LabelAligner
+from vad.evaluate.metrics import binary_metrics
 
 
 def evaluate_model(dataset: Iterable, model) -> dict[str, float]:

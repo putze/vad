@@ -6,7 +6,7 @@ from typing import cast
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from src.vad.data.preprocessing.preprocessing import VADPreprocessor
+from vad.data.preprocessing.preprocessing import VADPreprocessor
 
 
 class ProcessedVADDataset(Dataset):

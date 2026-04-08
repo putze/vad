@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch import Tensor
 
-from src.vad.visualization.helpers import (
+from vad.visualization.helpers import (
     binarize_labels,
     to_numpy_1d,
     validate_1d_tensor,
 )
-from src.vad.visualization.style import set_plot_style
+from vad.visualization.style import set_plot_style
 
 
 def compute_frame_boundaries(

@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from torch.optim import Optimizer
 
-from src.vad.training.callbacks import MetricTracker
+from vad.training.callbacks import MetricTracker
 
 
 class CheckpointManager:

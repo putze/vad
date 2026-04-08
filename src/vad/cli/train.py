@@ -4,21 +4,20 @@ from pathlib import Path
 from typing import cast
 
 import torch
-
-from src.vad.data import (
+from vad.data import (
     DataLoaderConfig,
     DatasetConfig,
     build_dataloaders,
     build_processed_datasets,
 )
-from src.vad.data.preprocessing import (
+from vad.data.preprocessing import (
     AudioPreprocessor,
     LabelAligner,
     LogMelFeatureExtractor,
     VADPreprocessor,
 )
-from src.vad.models.causal_conv import CausalVAD
-from src.vad.training.loops import train_model
+from vad.models.causal_conv import CausalVAD
+from vad.training.loops import train_model
 
 
 def build_preprocessor() -> VADPreprocessor:

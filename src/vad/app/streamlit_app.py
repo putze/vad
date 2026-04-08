@@ -5,12 +5,12 @@ from pathlib import Path
 import streamlit as st
 import torch
 
-from app.components.offline import render_offline_tab
-from app.components.online import render_online_tab
-from app.sidebar import sidebar
-from src.vad.config import AudioConfig
-from src.vad.inference import OfflineVADInferencer
-from src.vad.inference.streaming import StreamingVADInferencer
+from vad.app.components.offline import render_offline_tab
+from vad.app.components.online import render_online_tab
+from vad.app.sidebar import sidebar
+from vad.config import AudioConfig
+from vad.inference import OfflineVADInferencer
+from vad.inference.streaming import StreamingVADInferencer
 
 APP_TITLE = "Voice Activity Detection Demo"
 
@@ -29,7 +29,7 @@ def create_inferencer(
         checkpoint_path=checkpoint_path,
         device=device,
         target_sample_rate=audio_config.sample_rate,
-        n_mels=40,
+        n_mels=audio_config.n_mels,
         frame_length_ms=audio_config.frame_length_ms,
         frame_shift_ms=audio_config.frame_shift_ms,
     )
@@ -51,7 +51,7 @@ def create_streaming_inferencer(
         checkpoint_path=checkpoint_path,
         device=torch.device(device_str),
         target_sample_rate=audio_config.sample_rate,
-        n_mels=40,
+        n_mels=audio_config.n_mels,
         frame_length_ms=audio_config.frame_length_ms,
         frame_shift_ms=audio_config.frame_shift_ms,
     )

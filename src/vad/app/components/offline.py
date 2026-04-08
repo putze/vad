@@ -4,16 +4,16 @@ import pandas as pd
 import streamlit as st
 import torch
 
-from app.audio.upload import load_audio_from_upload
-from app.plots import (
+from vad.app.audio.upload import load_audio_from_upload
+from vad.app.plots import (
     plot_overview,
     plot_predictions,
     plot_probabilities,
     plot_waveform,
 )
-from src.vad.config import AudioConfig
-from src.vad.inference import OfflineVADInferencer
-from src.vad.inference.offline import OfflineVADPrediction
+from vad.config import AudioConfig
+from vad.inference import OfflineVADInferencer
+from vad.inference.offline import OfflineVADPrediction
 
 
 def run_offline_inference(

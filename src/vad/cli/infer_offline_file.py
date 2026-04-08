@@ -6,10 +6,9 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import torch
-
-from src.vad.inference import OfflineVADInferencer, predictions_to_segments
-from src.vad.inference.offline import OfflineVADPrediction
-from src.vad.visualization.inference import plot_offline_vad_prediction
+from vad.inference import OfflineVADInferencer, predictions_to_segments
+from vad.inference.offline import OfflineVADPrediction
+from vad.visualization.inference import plot_offline_vad_prediction
 
 
 def parse_args() -> argparse.Namespace:

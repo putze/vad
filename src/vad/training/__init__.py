@@ -1,5 +1,4 @@
 from .callbacks import (
-    BestModelTracker,
     EarlyStopping,
 )
 from .formatting import format_metrics
