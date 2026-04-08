@@ -5,6 +5,7 @@ from pathlib import Path
 
 import torch
 from torch import Tensor
+
 from vad.data.file_utils import load_audio
 from vad.data.preprocessing import AudioPreprocessor, LogMelFeatureExtractor
 from vad.data.utils import ensure_mono_waveform

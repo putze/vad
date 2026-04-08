@@ -28,7 +28,7 @@ def load_model(
     """
     model = CausalVAD(n_mels=n_mels)
 
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
     state_dict = (
         checkpoint["model_state_dict"]
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint

@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 import torch
+
 from vad.baseline.webrtc import WebRTCVADBaseline
 from vad.data import DatasetConfig, build_raw_dataset
 from vad.evaluate.evaluate import evaluate_model

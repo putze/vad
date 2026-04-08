@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import cast
 
 import torch
+
 from vad.data import (
     DataLoaderConfig,
     DatasetConfig,

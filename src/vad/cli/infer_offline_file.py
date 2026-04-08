@@ -6,6 +6,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import torch
+
 from vad.inference import OfflineVADInferencer, predictions_to_segments
 from vad.inference.offline import OfflineVADPrediction
 from vad.visualization.inference import plot_offline_vad_prediction
