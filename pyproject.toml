@@ -46,6 +46,7 @@ vad-train = "vad.cli.train:main"
 vad-infer-offline = "vad.cli.infer_offline_file:main"
 vad-stream-file = "vad.cli.stream_file:main"
 vad-compare-models = "vad.cli.compare_models:main"
+vad-demo = "vad.app.streamlit_app:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
