@@ -5,9 +5,19 @@ import torchaudio
 from torch import Tensor
 
 
-class AudioPreprocessor:
+class WaveformPreprocessor:
     """
-    Preprocess raw audio waveforms by resampling and optional normalization.
+    Preprocess raw waveforms while preserving label alignment.
+
+    This class operates on time-domain mono waveforms and optional sample-level
+    labels. It can:
+    - resample the waveform to a target sample rate,
+    - resize sample-level labels to match the resampled waveform length,
+    - optionally apply peak normalization.
+
+    The class is used both:
+    - during training, where waveform and labels must remain synchronized,
+    - during inference, where only waveform preprocessing is needed.
     """
 
     def __init__(
@@ -16,9 +26,11 @@ class AudioPreprocessor:
         normalize: bool = True,
     ) -> None:
         """
+        Initialize the waveform preprocessor.
+
         Args:
-            target_sample_rate (int): Desired output sample rate.
-            normalize (bool): Whether to apply peak normalization.
+            target_sample_rate: Desired output sample rate in Hz.
+            normalize: Whether to apply peak normalization after resampling.
         """
         if target_sample_rate <= 0:
             raise ValueError(f"`target_sample_rate` must be positive, got {target_sample_rate}")
@@ -29,7 +41,17 @@ class AudioPreprocessor:
 
     def _get_resampler(self, sample_rate: int) -> torchaudio.transforms.Resample:
         """
-        Return a cached resampler from `sample_rate` to `target_sample_rate`.
+        Return a cached resampler from ``sample_rate`` to ``target_sample_rate``.
+
+        Args:
+            sample_rate: Original waveform sample rate in Hz.
+
+        Returns:
+            A torchaudio resampler for the requested conversion.
+
+        Raises:
+            ValueError: If ``sample_rate`` is invalid or already matches the
+                target sample rate.
         """
         if sample_rate <= 0:
             raise ValueError(f"`sample_rate` must be positive, got {sample_rate}")
@@ -52,16 +74,21 @@ class AudioPreprocessor:
 
     def _resize_labels(self, labels: Tensor, new_length: int) -> Tensor:
         """
-        Resize 1D sample-level labels to a new length using nearest-neighbor mapping.
+        Resize sample-level labels to a new waveform length.
 
-        This preserves binary label semantics better than continuous interpolation.
+        Labels are remapped with nearest-neighbor indexing rather than
+        continuous interpolation. This preserves discrete binary label values.
 
         Args:
-            labels: Sample-level label tensor of shape [T].
+            labels: Sample-level label tensor of shape ``[num_samples]``.
             new_length: Desired output length.
 
         Returns:
-            Resized label tensor of shape [new_length].
+            Resized label tensor of shape ``[new_length]``.
+
+        Raises:
+            ValueError: If ``labels`` is not one-dimensional or if
+                ``new_length`` is not positive.
         """
         if labels.ndim != 1:
             raise ValueError(f"`labels` must be 1D, got shape {tuple(labels.shape)}")
@@ -86,13 +113,20 @@ class AudioPreprocessor:
     def _resample_waveform(self, waveform: Tensor, sample_rate: int) -> tuple[Tensor, int]:
         """
         Resample a mono waveform if needed.
+
+        Args:
+            waveform: Input waveform of shape ``[num_samples]``.
+            sample_rate: Original waveform sample rate in Hz.
+
+        Returns:
+            A tuple ``(waveform, sample_rate)`` containing the resampled
+            waveform and the updated sample rate.
         """
         if sample_rate == self.target_sample_rate:
             return waveform, sample_rate
 
         original_length = waveform.shape[0]
         resampler = self._get_resampler(sample_rate)
-
         waveform = resampler(waveform.unsqueeze(0)).squeeze(0)
 
         new_length = waveform.shape[0]
@@ -106,7 +140,13 @@ class AudioPreprocessor:
 
     def _normalize_waveform(self, waveform: Tensor) -> Tensor:
         """
-        Peak-normalize a waveform if enabled.
+        Peak-normalize a waveform if normalization is enabled.
+
+        Args:
+            waveform: Input waveform of shape ``[num_samples]``.
+
+        Returns:
+            Normalized waveform with the same shape.
         """
         if not self.normalize:
             return waveform
@@ -118,14 +158,22 @@ class AudioPreprocessor:
 
     def process_waveform(self, waveform: Tensor, sample_rate: int) -> tuple[Tensor, int]:
         """
-        Apply preprocessing to a waveform only, without labels.
+        Preprocess a waveform without labels.
+
+        This method is intended for inference or other situations where only
+        the waveform needs to be transformed.
 
         Args:
-            waveform: Input mono waveform [T].
-            sample_rate: Original sample rate.
+            waveform: Input mono waveform of shape ``[num_samples]``.
+            sample_rate: Original waveform sample rate in Hz.
 
         Returns:
-            tuple[Tensor, int]: Processed waveform [T] and updated sample rate.
+            A tuple ``(waveform, sample_rate)`` containing the processed
+            waveform and the updated sample rate.
+
+        Raises:
+            ValueError: If the waveform is not one-dimensional or the sample
+                rate is invalid.
         """
         if waveform.ndim != 1:
             raise ValueError(f"`waveform` must be 1D, got shape {tuple(waveform.shape)}")
@@ -140,19 +188,32 @@ class AudioPreprocessor:
         return waveform, sample_rate
 
     def __call__(
-        self, waveform: Tensor, labels: Tensor, sample_rate: int
+        self,
+        waveform: Tensor,
+        labels: Tensor,
+        sample_rate: int,
     ) -> tuple[Tensor, Tensor, int]:
         """
-        Apply preprocessing to a waveform.
+        Preprocess a waveform and synchronized sample-level labels.
+
+        If resampling changes the waveform length, labels are resized to the
+        same length so that waveform samples and labels remain aligned.
 
         Args:
-            waveform (Tensor): Input mono waveform [T].
-            labels (Tensor): Input sample-level labels [T]
-            sample_rate (int): Original sample rate.
+            waveform: Input mono waveform of shape ``[num_samples]``.
+            labels: Sample-level labels of shape ``[num_samples]``.
+            sample_rate: Original waveform sample rate in Hz.
 
         Returns:
-            tuple[Tensor, int]: Processed waveform [T], resized sample-labels [T],
-                and updated sample rate.
+            A tuple ``(waveform, labels, sample_rate)`` where:
+            - ``waveform`` has shape ``[resampled_num_samples]``,
+            - ``labels`` has shape ``[resampled_num_samples]``,
+            - ``sample_rate`` is the updated sample rate in Hz.
+
+        Raises:
+            ValueError: If waveform or labels are not one-dimensional, if their
+                input lengths differ, if ``sample_rate`` is invalid, or if the
+                processed waveform and labels end up misaligned.
         """
         if waveform.ndim != 1:
             raise ValueError(f"`waveform` must be 1D, got shape {tuple(waveform.shape)}")

@@ -3,7 +3,15 @@ from __future__ import annotations
 
 class MetricTracker:
     """
-    Track the best value of a metric according to an optimization mode.
+    Track the best value of a scalar metric.
+
+    The tracker supports both minimization and maximization objectives.
+    A new value is considered an improvement only if it exceeds the
+    current best by at least ``min_delta`` in the desired direction.
+
+    Examples:
+        - For validation loss, use ``mode="min"``.
+        - For accuracy or F1 score, use ``mode="max"``.
     """
 
     def __init__(self, mode: str = "min", min_delta: float = 0.0) -> None:
@@ -11,14 +19,21 @@ class MetricTracker:
         Initialize the metric tracker.
 
         Args:
-            mode (str): Optimization direction, either "min" or "max".
-            min_delta (float): Minimum change required to count as an improvement.
+            mode: Optimization direction:
+                - ``"min"`` means lower values are better.
+                - ``"max"`` means higher values are better.
+            min_delta: Minimum absolute improvement required to update the
+                best value. For example, in ``"min"`` mode, a new value must
+                be smaller than ``best_value - min_delta``.
 
         Raises:
-            ValueError: If mode is not "min" or "max".
+            ValueError: If ``mode`` is not ``"min"`` or ``"max"``.
+            ValueError: If ``min_delta`` is negative.
         """
         if mode not in {"min", "max"}:
             raise ValueError(f"mode must be 'min' or 'max', got {mode}")
+        if min_delta < 0:
+            raise ValueError(f"min_delta must be non-negative, got {min_delta}")
 
         self.mode = mode
         self.min_delta = min_delta
@@ -26,13 +41,17 @@ class MetricTracker:
 
     def is_improvement(self, value: float) -> bool:
         """
-        Check whether a value improves on the current best.
+        Return whether ``value`` improves on the current best.
+
+        The first observed value is always treated as an improvement,
+        because no best value exists yet.
 
         Args:
-            value (float): Current metric value.
+            value: Current metric value.
 
         Returns:
-            bool: True if the value is better than the current best, else False.
+            True if ``value`` is better than the current best according to
+            ``mode`` and ``min_delta``, otherwise False.
         """
         if self.best_value is None:
             return True
@@ -44,13 +63,13 @@ class MetricTracker:
 
     def update(self, value: float) -> bool:
         """
-        Update the best value if the new value is an improvement.
+        Update the tracked best value if ``value`` is an improvement.
 
         Args:
-            value (float): Current metric value.
+            value: Current metric value.
 
         Returns:
-            bool: True if best_value was updated, else False.
+            True if ``best_value`` was updated, otherwise False.
         """
         if self.is_improvement(value):
             self.best_value = value
@@ -60,7 +79,15 @@ class MetricTracker:
 
 class EarlyStopping:
     """
-    Early stopping helper for a monitored validation metric.
+    Stop training when a monitored metric stops improving.
+
+    This helper counts consecutive epochs without improvement. Training
+    should stop once the number of consecutive non-improving epochs
+    reaches ``patience``.
+
+    Example:
+        If ``patience=3``, training stops after 3 consecutive epochs
+        without improvement.
     """
 
     def __init__(
@@ -70,31 +97,50 @@ class EarlyStopping:
         mode: str = "min",
     ) -> None:
         """
-        Initialize early stopping.
+        Initialize the early stopping helper.
 
         Args:
-            patience (int): Number of consecutive non-improving epochs allowed.
-            min_delta (float): Minimum change required to count as an improvement.
-            mode (str): Optimization direction, either "min" or "max".
+            patience: Number of consecutive non-improving epochs allowed
+                before stopping.
+            min_delta: Minimum improvement required to reset the bad-epoch
+                counter.
+            mode: Optimization direction:
+                - ``"min"`` means lower values are better.
+                - ``"max"`` means higher values are better.
+
+        Raises:
+            ValueError: If ``patience`` is negative.
         """
+        if patience < 0:
+            raise ValueError(f"patience must be non-negative, got {patience}")
+
         self.patience = patience
         self.tracker = MetricTracker(mode=mode, min_delta=min_delta)
         self.num_bad_epochs = 0
 
     @property
     def best_value(self) -> float | None:
-        """Return the best monitored value seen so far."""
+        """
+        Return the best monitored value seen so far.
+
+        Returns:
+            The current best metric value, or None if no value has been
+            observed yet.
+        """
         return self.tracker.best_value
 
     def step(self, value: float) -> bool:
         """
-        Update the state with a new metric value.
+        Process a new metric value and decide whether training should stop.
+
+        If the metric improves, the internal bad-epoch counter is reset.
+        Otherwise, the counter is incremented.
 
         Args:
-            value (float): Current metric value.
+            value: Current metric value.
 
         Returns:
-            bool: True if training should stop, else False.
+            True if training should stop, otherwise False.
         """
         if self.tracker.update(value):
             self.num_bad_epochs = 0

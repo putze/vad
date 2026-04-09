@@ -4,13 +4,12 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from vad.training.callbacks import (
-    EarlyStopping,
-)
+from vad.training.callbacks import EarlyStopping
 from vad.training.checkpoint_manager import CheckpointManager
 from vad.training.formatting import format_metrics
 from vad.training.logger import TensorBoardLogger
@@ -18,30 +17,18 @@ from vad.training.metrics import BinaryClassificationMetrics, VADMetricsTracker
 from vad.training.run_config import ExperimentPaths
 
 
-def make_padding_mask(lengths: Tensor, max_len: int) -> Tensor:
-    """
-    Create a boolean mask for variable-length sequences.
-
-    Args:
-        lengths (Tensor): Tensor [B] containing valid lengths.
-        max_len (int): Maximum sequence length.
-
-    Returns:
-        Tensor: Boolean mask [B, T].
-    """
-    time_index = torch.arange(max_len, device=lengths.device).unsqueeze(0)
-    return time_index < lengths.unsqueeze(1)
-
-
 def extract_logits_for_loss(logits: Tensor) -> Tensor:
     """
-    Normalize logits to shape [B, T].
+    Normalize model outputs to shape [B, T] for loss computation.
 
     Args:
-        logits (Tensor): Tensor [B, T] or [B, 1, T].
+        logits: Model output tensor with shape [B, T] or [B, 1, T].
 
     Returns:
-        Tensor: [B, T].
+        Tensor with shape [B, T].
+
+    Raises:
+        ValueError: If the tensor shape is unsupported.
     """
     if logits.ndim == 2:
         return logits
@@ -49,7 +36,7 @@ def extract_logits_for_loss(logits: Tensor) -> Tensor:
     if logits.ndim == 3 and logits.shape[1] == 1:
         return logits[:, 0, :]
 
-    raise ValueError(f"Unexpected logits shape: {tuple(logits.shape)}")
+    raise ValueError(f"Expected logits with shape [B, T] or [B, 1, T], got {tuple(logits.shape)}")
 
 
 def masked_bce_with_logits_loss(
@@ -58,28 +45,40 @@ def masked_bce_with_logits_loss(
     mask: Tensor,
 ) -> Tensor:
     """
-    Compute BCE loss only over valid frames.
+    Compute binary cross-entropy loss over valid frames only.
+
+    The loss is averaged over positions where ``mask`` is True. Padded or
+    otherwise invalid frames do not contribute to the loss.
 
     Args:
-        logits (Tensor): [B, T]
-        targets (Tensor): [B, T]
-        mask (Tensor): [B, T]
+        logits: Logits with shape [B, T].
+        targets: Binary targets with shape [B, T].
+        mask: Boolean validity mask with shape [B, T].
 
     Returns:
-        Scalar loss.
+        Scalar tensor containing the mean loss over valid frames.
+
+    Raises:
+        ValueError: If input shapes do not match.
     """
-    loss = torch.nn.functional.binary_cross_entropy_with_logits(
+    if logits.shape != targets.shape or logits.shape != mask.shape:
+        raise ValueError(
+            "logits, targets, and mask must have the same shape, got "
+            f"{tuple(logits.shape)}, {tuple(targets.shape)}, and {tuple(mask.shape)}"
+        )
+
+    valid_count = mask.sum()
+    if valid_count.item() == 0:
+        return logits.new_tensor(0.0)
+
+    per_frame_loss = F.binary_cross_entropy_with_logits(
         logits,
         targets.float(),
         reduction="none",
     )
 
-    loss = loss[mask]
-
-    if loss.numel() == 0:
-        return logits.new_tensor(0.0)
-
-    return loss.mean()
+    masked_loss = per_frame_loss * mask.to(dtype=per_frame_loss.dtype)
+    return masked_loss.sum() / valid_count
 
 
 def run_epoch(
@@ -92,19 +91,23 @@ def run_epoch(
     show_progress: bool = False,
 ) -> BinaryClassificationMetrics:
     """
-    Run one epoch.
+    Run one full training or validation epoch.
+
+    If an optimizer is provided, the model is run in training mode and
+    parameters are updated. Otherwise, the epoch is run in evaluation mode.
 
     Args:
-        model: Model.
-        dataloader: DataLoader.
-        device: Device.
-        optimizer: If provided, training mode.
-        epoch: Current epoch number (1-based).
-        num_epochs: Total number of epochs.
+        model: Model to evaluate or train.
+        dataloader: DataLoader yielding ``(features, labels, lengths, frame_masks)``.
+        device: Device on which computation is performed.
+        optimizer: Optimizer used for training. If None, no gradients are
+            computed and no parameter updates are performed.
+        epoch: Current epoch number, used only for progress display.
+        num_epochs: Total number of epochs, used only for progress display.
         show_progress: Whether to display a tqdm progress bar.
 
     Returns:
-        BinaryClassificationMetrics
+        Aggregated frame-level metrics for the epoch.
     """
     is_training = optimizer is not None
     model.train(is_training)
@@ -112,7 +115,7 @@ def run_epoch(
     tracker = VADMetricsTracker()
 
     progress_bar: tqdm | None = None
-    batch_iter: Iterator[tuple[Tensor, Tensor, Tensor]]
+    batch_iter: Iterator[tuple[Tensor, Tensor, Tensor, Tensor]]
 
     if show_progress:
         split = "train" if is_training else "val"
@@ -126,12 +129,11 @@ def run_epoch(
     else:
         batch_iter = iter(dataloader)
 
-    for batch_index, (features, labels, lengths) in enumerate(batch_iter, start=1):
+    for batch_index, (features, labels, lengths, frame_masks) in enumerate(batch_iter, start=1):
         features = features.to(device)
         labels = labels.to(device)
         lengths = lengths.to(device)
-
-        mask = make_padding_mask(lengths, labels.shape[1])
+        frame_masks = frame_masks.to(device).bool()
 
         with torch.set_grad_enabled(is_training):
             logits = model(features)
@@ -140,7 +142,7 @@ def run_epoch(
             loss = masked_bce_with_logits_loss(
                 logits=logits_bt,
                 targets=labels,
-                mask=mask,
+                mask=frame_masks,
             )
 
             if optimizer is not None:
@@ -148,11 +150,11 @@ def run_epoch(
                 loss.backward()
                 optimizer.step()
 
-        tracker.update(
-            logits=logits,
+        tracker.update_from_logits(
+            logits=logits_bt,
             targets=labels,
             loss=loss,
-            mask=mask,
+            mask=frame_masks,
         )
 
         if progress_bar is not None and batch_index % 10 == 0:
@@ -178,60 +180,70 @@ def train_model(
     checkpoint_path: str | Path = "checkpoints",
 ) -> None:
     """
-    Full training loop with TensorBoard logging.
+    Train a model and evaluate it on a validation set each epoch.
+
+    This function handles:
+        - experiment directory creation
+        - TensorBoard logging
+        - console logging
+        - best/last checkpoint saving
+        - early stopping
 
     Args:
-        model: Model.
+        model: Model to train.
         train_loader: Training DataLoader.
         val_loader: Validation DataLoader.
-        optimizer: Optimizer.
-        device: Device.
-        num_epochs: Number of epochs.
-        log_dir: TensorBoard directory.
-        checkpoint_path: Where to save best model.
+        optimizer: Optimizer used for training.
+        device: Device on which training runs.
+        num_epochs: Maximum number of training epochs.
+        log_dir: Root directory for TensorBoard logs.
+        experiment_name: Name used to group runs of the same experiment.
+        checkpoint_path: Root directory for checkpoints.
     """
     model.to(device)
 
     experiment = ExperimentPaths.create(
-        log_root=log_dir, experiment_name=experiment_name, checkpoint_root=checkpoint_path
+        log_root=log_dir,
+        experiment_name=experiment_name,
+        checkpoint_root=checkpoint_path,
     )
     logger = TensorBoardLogger(experiment.log_dir)
     checkpoint_manager = CheckpointManager(
-        checkpoint_dir=experiment.checkpoint_dir, monitor="val_f1", mode="max"
+        checkpoint_dir=experiment.checkpoint_dir,
+        monitor="val_f1",
+        mode="max",
     )
     early_stopping = EarlyStopping(patience=5, mode="min")
 
     try:
         for epoch in range(1, num_epochs + 1):
             train_metrics = run_epoch(
-                model,
-                train_loader,
-                device,
-                optimizer,
+                model=model,
+                dataloader=train_loader,
+                device=device,
+                optimizer=optimizer,
                 epoch=epoch,
                 num_epochs=num_epochs,
                 show_progress=True,
             )
 
             val_metrics = run_epoch(
-                model,
-                val_loader,
-                device,
+                model=model,
+                dataloader=val_loader,
+                device=device,
                 optimizer=None,
                 epoch=epoch,
                 num_epochs=num_epochs,
                 show_progress=True,
             )
 
-            # TensorBoard logging
-            logger.log_epoch(epoch, train_metrics, val_metrics)
+            lr = optimizer.param_groups[0]["lr"]
+            logger.log_epoch(epoch, train_metrics, val_metrics, lr)
 
-            # Console logging
             print(f"Epoch {epoch:03d}")
             print(format_metrics("train", train_metrics))
-            print(format_metrics("val  ", val_metrics))
+            print(format_metrics("val", val_metrics))
 
-            # Last and best model (based on F1)
             metrics = {
                 "train_loss": train_metrics.loss,
                 "train_f1": train_metrics.f1,
@@ -240,20 +252,21 @@ def train_model(
                 "val_accuracy": val_metrics.accuracy,
             }
             improved = checkpoint_manager.step(
-                epoch=epoch, model=model, optimizer=optimizer, metrics=metrics
+                epoch=epoch,
+                model=model,
+                optimizer=optimizer,
+                metrics=metrics,
             )
             if improved:
                 print(
-                    f"""Saved new best checkpoint with
-                    {checkpoint_manager.monitor}={metrics[checkpoint_manager.monitor]:.4f}"""
+                    f"Saved new best checkpoint with "
+                    f"{checkpoint_manager.monitor}={metrics[checkpoint_manager.monitor]:.4f}"
                 )
 
-            # Early stopping (based on loss)
             if early_stopping.step(val_metrics.loss):
                 print(f"Early stopping at epoch {epoch}")
                 break
 
-        # Log final hparams
         logger.log_hparams(
             hparams={
                 "optimizer": optimizer.__class__.__name__,

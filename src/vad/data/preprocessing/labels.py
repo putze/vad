@@ -6,10 +6,20 @@ from torch import Tensor
 
 class LabelAligner:
     """
-    Align sample-level labels to frame-level labels using max-pooling logic.
+    Align sample-level labels to the feature frame grid.
 
-    A frame is labeled as speech (1) if any sample within its window is speech,
-    otherwise non-speech (0).
+    Each output frame corresponds to a sliding window over the sample-level
+    labels. A frame is labeled as speech if any sample inside that window is
+    labeled as speech.
+
+    This implements a max-pooling alignment rule:
+
+    - frame label = 1 if any label in the frame window is 1,
+    - frame label = 0 otherwise.
+
+    When ``center=True``, symmetric zero-padding is applied before windowing to
+    mirror centered STFT-style framing. The final output is trimmed or padded to
+    match the requested ``num_frames`` exactly.
     """
 
     def __init__(
@@ -19,10 +29,16 @@ class LabelAligner:
         center: bool = True,
     ) -> None:
         """
+        Initialize the label aligner.
+
         Args:
-            hop_length (int): Number of samples between consecutive frames.
-            frame_length (int): Number of samples per frame window.
-            center (bool): Whether frames are centered (applies symmetric padding).
+            hop_length: Number of samples between consecutive frame starts.
+            frame_length: Number of samples in each frame window.
+            center: Whether to apply symmetric padding before frame extraction
+                to mimic centered feature framing.
+
+        Raises:
+            ValueError: If ``hop_length`` or ``frame_length`` is not positive.
         """
         if hop_length <= 0:
             raise ValueError(f"`hop_length` must be positive, got {hop_length}")
@@ -38,17 +54,20 @@ class LabelAligner:
         Convert sample-level labels to frame-level labels.
 
         Args:
-            labels (Tensor): 1D tensor [T] with binary labels (0 or 1).
-            num_frames (int): Number of output frames.
+            labels: One-dimensional tensor of shape ``[num_samples]`` containing
+                binary sample-level labels.
+            num_frames: Expected number of output frames, typically taken from
+                the feature extractor output.
 
         Returns:
-            Tensor: Frame-level labels [num_frames].
+            Frame-level label tensor of shape ``[num_frames]``.
 
         Raises:
-            ValueError: If input labels are not 1D.
+            ValueError: If ``labels`` is not one-dimensional or if
+                ``num_frames`` is not positive.
         """
         if labels.ndim != 1:
-            raise ValueError(f"Expected 1D labels [T], got shape {tuple(labels.shape)}")
+            raise ValueError(f"Expected 1D labels [num_samples], got shape {tuple(labels.shape)}")
 
         if num_frames <= 0:
             raise ValueError(f"`num_frames` must be positive, got {num_frames}")
@@ -63,21 +82,17 @@ class LabelAligner:
             extra = self.frame_length - labels.shape[0]
             labels = F.pad(labels, (0, extra), mode="constant", value=0.0)
 
-        # Create sliding windows: shape → [num_windows, frame_length]
         windows = labels.unfold(
             dimension=0,
             size=self.frame_length,
             step=self.hop_length,
         )
 
-        # Max over each frame window → [num_frames]
         frame_labels = windows.max(dim=1).values
         current_num_frames = frame_labels.shape[0]
 
-        # Handle case where unfold gives more frames than expected
         if current_num_frames > num_frames:
             frame_labels = frame_labels[:num_frames]
-        # Handle case where unfold gives less frames than expected
         elif current_num_frames < num_frames:
             pad_amount = num_frames - current_num_frames
             frame_labels = F.pad(

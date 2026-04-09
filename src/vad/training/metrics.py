@@ -20,17 +20,19 @@ class BinaryClassificationMetrics:
 
     Attributes:
         loss: Mean loss over all valid frames.
-        accuracy: Fraction of correct predictions.
-        precision: TP / (TP + FP).
-        recall: TP / (TP + FN).
+        accuracy: Fraction of correctly classified frames.
+        precision: Positive predictive value, defined as TP / (TP + FP).
+        recall: True positive rate, defined as TP / (TP + FN).
         f1: Harmonic mean of precision and recall.
-        false_positive_rate: FP / (FP + TN).
-        false_negative_rate: FN / (FN + TP).
-        tp: Number of true positives.
-        fp: Number of false positives.
-        tn: Number of true negatives.
-        fn: Number of false negatives.
-        num_frames: Number of valid evaluated frames.
+        false_positive_rate: Fraction of non-speech frames predicted as speech,
+            defined as FP / (FP + TN).
+        false_negative_rate: Fraction of speech frames predicted as non-speech,
+            defined as FN / (FN + TP).
+        tp: Number of true positive frames.
+        fp: Number of false positive frames.
+        tn: Number of true negative frames.
+        fn: Number of false negative frames.
+        num_frames: Number of valid frames included in the computation.
     """
 
     loss: float
@@ -48,7 +50,12 @@ class BinaryClassificationMetrics:
 
     @classmethod
     def empty(cls) -> BinaryClassificationMetrics:
-        """Return a zero-initialized metrics object."""
+        """
+        Return a zero-initialized metrics object.
+
+        Returns:
+            A metrics object with all scalar values set to zero.
+        """
         return cls(
             loss=0.0,
             accuracy=0.0,
@@ -67,27 +74,38 @@ class BinaryClassificationMetrics:
 
 class VADMetricsTracker:
     """
-    Hybrid metrics tracker for frame-level binary VAD.
+    Accumulate frame-level binary classification metrics for VAD.
 
-    TorchMetrics provides the metric implementations, while this wrapper handles:
-        - shape normalization
-        - masking padded frames
-        - epoch-level loss accumulation
+    This tracker supports two update modes:
+        - ``update_from_logits`` for training/validation with raw model logits
+        - ``update_from_predictions`` for evaluation with hard binary predictions
 
-    Expected inputs:
-        logits:  [B, T] or [B, 1, T]
-        targets: [B, T]
-        mask:    [B, T] with True for valid frames
+    Expected shapes:
+        logits:       [B, T] or [B, 1, T]
+        predictions:  [B, T]
+        targets:      [B, T]
+        mask:         [B, T], where True indicates a valid frame
+
+    Notes:
+        - ``update_from_logits`` applies sigmoid internally and accumulates loss.
+        - ``update_from_predictions`` assumes predictions are already binary and
+          does not accumulate loss.
     """
 
     def __init__(self, threshold: float = 0.5) -> None:
         """
-        Initialize the tracker.
+        Initialize the metrics tracker.
 
         Args:
             threshold: Probability threshold used to convert sigmoid outputs
                 into binary predictions.
+
+        Raises:
+            ValueError: If ``threshold`` is outside the interval [0, 1].
         """
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError(f"threshold must be in [0, 1], got {threshold}")
+
         self.threshold = threshold
 
         self.accuracy = BinaryAccuracy(threshold=threshold)
@@ -99,7 +117,9 @@ class VADMetricsTracker:
         self.reset()
 
     def reset(self) -> None:
-        """Reset all metric states and accumulated loss."""
+        """
+        Reset all metric states and accumulated loss statistics.
+        """
         self.accuracy.reset()
         self.precision.reset()
         self.recall.reset()
@@ -108,8 +128,9 @@ class VADMetricsTracker:
 
         self.total_loss = 0.0
         self.total_frames = 0
+        self.loss_frames = 0
 
-    def update(
+    def update_from_logits(
         self,
         logits: Tensor,
         targets: Tensor,
@@ -117,27 +138,28 @@ class VADMetricsTracker:
         mask: Tensor | None = None,
     ) -> None:
         """
-        Update tracker state from one batch.
+        Update tracker state from raw logits.
 
         Args:
-            logits: Model outputs before sigmoid. Shape [B, T] or [B, 1, T].
-            targets: Binary frame labels. Shape [B, T].
-            loss: Scalar batch loss.
-            mask: Optional boolean mask with shape [B, T]. True means valid.
+            logits: Model outputs before sigmoid, with shape [B, T] or [B, 1, T].
+            targets: Binary frame labels with shape [B, T].
+            loss: Scalar batch loss. It is assumed to represent the mean loss
+                over valid frames in the batch.
+            mask: Optional boolean mask of shape [B, T], where True marks valid
+                frames.
 
         Raises:
-            ValueError: If tensor shapes are not compatible.
+            ValueError: If tensor shapes are incompatible.
         """
         logits_bt = self._flatten_logits(logits)
         targets_bt = self._flatten_targets(targets)
+        valid_mask = self._build_valid_mask(targets_bt, mask)
 
         if logits_bt.shape != targets_bt.shape:
             raise ValueError(
                 "logits and targets must have the same shape, got "
                 f"{tuple(logits_bt.shape)} and {tuple(targets_bt.shape)}"
             )
-
-        valid_mask = self._build_valid_mask(targets_bt, mask)
 
         logits_valid = logits_bt[valid_mask]
         targets_valid = targets_bt[valid_mask]
@@ -148,24 +170,65 @@ class VADMetricsTracker:
         probs_valid = torch.sigmoid(logits_valid)
         targets_valid = targets_valid.to(dtype=torch.long)
 
-        self.accuracy.update(probs_valid, targets_valid)
-        self.precision.update(probs_valid, targets_valid)
-        self.recall.update(probs_valid, targets_valid)
-        self.f1.update(probs_valid, targets_valid)
-        self.confusion.update(probs_valid, targets_valid)
+        self._update_metric_states(probs_valid, targets_valid)
 
         num_valid = int(targets_valid.numel())
         loss_value = float(loss.detach().item()) if isinstance(loss, Tensor) else float(loss)
 
         self.total_loss += loss_value * num_valid
+        self.loss_frames += num_valid
         self.total_frames += num_valid
+
+    def update_from_predictions(
+        self,
+        predictions: Tensor,
+        targets: Tensor,
+        mask: Tensor | None = None,
+    ) -> None:
+        """
+        Update tracker state from hard binary predictions.
+
+        Args:
+            predictions: Binary frame predictions with shape [B, T].
+            targets: Binary frame labels with shape [B, T].
+            mask: Optional boolean mask of shape [B, T], where True marks valid
+                frames.
+
+        Raises:
+            ValueError: If tensor shapes are incompatible or if predictions /
+                targets contain values other than 0 and 1.
+        """
+        predictions_bt = self._flatten_targets(predictions)
+        targets_bt = self._flatten_targets(targets)
+        valid_mask = self._build_valid_mask(targets_bt, mask)
+
+        if predictions_bt.shape != targets_bt.shape:
+            raise ValueError(
+                "predictions and targets must have the same shape, got "
+                f"{tuple(predictions_bt.shape)} and {tuple(targets_bt.shape)}"
+            )
+
+        predictions_valid = predictions_bt[valid_mask].to(dtype=torch.long)
+        targets_valid = targets_bt[valid_mask].to(dtype=torch.long)
+
+        if predictions_valid.numel() == 0:
+            return
+
+        self._validate_binary_tensor(predictions_valid, name="predictions")
+        self._validate_binary_tensor(targets_valid, name="targets")
+
+        # TorchMetrics accepts integer predictions directly for binary metrics.
+        self._update_metric_states(predictions_valid, targets_valid)
+
+        self.total_frames += int(targets_valid.numel())
 
     def compute(self) -> BinaryClassificationMetrics:
         """
-        Compute final epoch metrics.
+        Compute aggregated metrics over all accumulated updates.
 
         Returns:
-            Aggregated frame-level binary classification metrics.
+            A dataclass containing loss, standard binary classification metrics,
+            confusion counts, and derived error rates.
         """
         if self.total_frames == 0:
             return BinaryClassificationMetrics.empty()
@@ -178,9 +241,10 @@ class VADMetricsTracker:
 
         false_positive_rate = fp / (fp + tn) if (fp + tn) > 0 else 0.0
         false_negative_rate = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+        mean_loss = self.total_loss / self.loss_frames if self.loss_frames > 0 else 0.0
 
         return BinaryClassificationMetrics(
-            loss=self.total_loss / self.total_frames,
+            loss=mean_loss,
             accuracy=float(self.accuracy.compute().item()),
             precision=float(self.precision.compute().item()),
             recall=float(self.recall.compute().item()),
@@ -194,6 +258,20 @@ class VADMetricsTracker:
             num_frames=self.total_frames,
         )
 
+    def _update_metric_states(self, preds_or_probs: Tensor, targets: Tensor) -> None:
+        """
+        Update all TorchMetrics states.
+
+        Args:
+            preds_or_probs: Either binary predictions or probabilities.
+            targets: Binary targets as integer tensor.
+        """
+        self.accuracy.update(preds_or_probs, targets)
+        self.precision.update(preds_or_probs, targets)
+        self.recall.update(preds_or_probs, targets)
+        self.f1.update(preds_or_probs, targets)
+        self.confusion.update(preds_or_probs, targets)
+
     @staticmethod
     def _flatten_logits(logits: Tensor) -> Tensor:
         """
@@ -203,10 +281,10 @@ class VADMetricsTracker:
             logits: Tensor of shape [B, T] or [B, 1, T].
 
         Returns:
-            Logits with shape [B, T].
+            Logits reshaped to [B, T].
 
         Raises:
-            ValueError: If logits have an unsupported shape.
+            ValueError: If ``logits`` has an unsupported shape.
         """
         if logits.ndim == 2:
             return logits
@@ -221,35 +299,35 @@ class VADMetricsTracker:
     @staticmethod
     def _flatten_targets(targets: Tensor) -> Tensor:
         """
-        Validate targets shape.
+        Validate that a tensor has shape [B, T].
 
         Args:
             targets: Tensor expected to have shape [B, T].
 
         Returns:
-            Unchanged targets tensor.
+            The unchanged tensor.
 
         Raises:
-            ValueError: If targets do not have shape [B, T].
+            ValueError: If the tensor does not have shape [B, T].
         """
         if targets.ndim != 2:
-            raise ValueError(f"Expected targets with shape [B, T], got {tuple(targets.shape)}")
+            raise ValueError(f"Expected tensor with shape [B, T], got {tuple(targets.shape)}")
         return targets
 
     @staticmethod
     def _build_valid_mask(targets: Tensor, mask: Tensor | None) -> Tensor:
         """
-        Build a boolean validity mask.
+        Build a boolean mask indicating which frames are valid.
 
         Args:
             targets: Target tensor with shape [B, T].
-            mask: Optional boolean mask with shape [B, T].
+            mask: Optional mask tensor with shape [B, T].
 
         Returns:
-            Boolean mask with shape [B, T], where True marks valid frames.
+            A boolean tensor of shape [B, T], where True marks valid frames.
 
         Raises:
-            ValueError: If mask shape does not match targets.
+            ValueError: If ``mask`` shape does not match ``targets``.
         """
         if mask is None:
             return torch.ones_like(targets, dtype=torch.bool)
@@ -261,3 +339,18 @@ class VADMetricsTracker:
             )
 
         return mask.to(dtype=torch.bool)
+
+    @staticmethod
+    def _validate_binary_tensor(values: Tensor, name: str) -> None:
+        """
+        Validate that a tensor contains only binary values 0 and 1.
+
+        Args:
+            values: Tensor to validate.
+            name: Name used in the error message.
+
+        Raises:
+            ValueError: If non-binary values are found.
+        """
+        if not torch.all((values == 0) | (values == 1)):
+            raise ValueError(f"{name} must contain only binary values {{0, 1}}")

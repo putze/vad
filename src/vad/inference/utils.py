@@ -7,7 +7,12 @@ from torch import Tensor
 
 
 class FeatureExtractorProtocol(Protocol):
-    """Protocol for waveform-to-feature extractors used in inference."""
+    """
+    Protocol for waveform-to-feature extractors used during inference.
+
+    Implementations are expected to transform a mono waveform into a feature
+    representation suitable for the VAD model.
+    """
 
     def extract(self, waveform: Tensor, sample_rate: int) -> Tensor:
         """
@@ -29,12 +34,25 @@ def ensure_time_major_features(
     feature_dim: int | None = None,
 ) -> Tensor:
     """
-    Normalize features to shape ``[T, F]``.
+    Normalize features to shape ``[T, F]`` when the layout can be inferred.
+
+    Supported inputs:
+        - ``[T, F]``
+        - ``[F, T]``
+        - ``[1, T, F]``
+        - ``[1, F, T]``
+
+    If ``feature_dim`` is provided, the function uses it to infer which axis
+    corresponds to the feature dimension and transposes when needed.
+
+    If ``feature_dim`` is not provided, 2D inputs are returned unchanged.
+    In that case, the caller is responsible for ensuring that the tensor is
+    already time-major.
 
     Args:
         features: Feature tensor.
-        feature_dim: Expected feature dimension. When provided, the output
-            layout is inferred from the matching dimension.
+        feature_dim: Expected feature dimension. When provided, one dimension
+            of the 2D tensor must match this value.
 
     Returns:
         Feature tensor of shape ``[T, F]``.
@@ -79,6 +97,10 @@ def prepare_conv1d_input(features: Tensor, device: torch.device) -> Tensor:
     """
     Convert time-major features to Conv1d input format.
 
+    PyTorch ``Conv1d`` expects input shaped as ``[batch, channels, time]``.
+    This function converts time-major features ``[T, F]`` into ``[1, F, T]``
+    and moves the tensor to the target device.
+
     Args:
         features: Feature tensor of shape ``[T, F]``.
         device: Target device.
@@ -86,13 +108,17 @@ def prepare_conv1d_input(features: Tensor, device: torch.device) -> Tensor:
     Returns:
         Tensor of shape ``[1, F, T]``.
     """
-
     return features.transpose(0, 1).unsqueeze(0).to(device)
 
 
 def normalize_binary_logits(logits: Tensor) -> Tensor:
     """
     Normalize binary model outputs to shape ``[T]``.
+
+    Supported inputs:
+        - ``[1, T]``
+        - ``[1, 1, T]``
+        - ``[1, T, 1]``
 
     Args:
         logits: Raw model output.
@@ -130,8 +156,16 @@ def logits_to_predictions(logits: Tensor, threshold: float) -> tuple[Tensor, Ten
         threshold: Probability threshold for speech detection.
 
     Returns:
-        Tuple containing frame-level probabilities and binary predictions.
+        Tuple ``(probabilities, predictions)``, where:
+            - ``probabilities`` has shape ``[T]`` and dtype float
+            - ``predictions`` has shape ``[T]`` and dtype int64
+
+    Raises:
+        ValueError: If ``threshold`` is outside the interval [0, 1].
     """
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError(f"threshold must be in [0, 1], got {threshold}")
+
     probabilities = torch.sigmoid(logits).cpu()
     predictions = (probabilities >= threshold).to(torch.int64)
     return probabilities, predictions
@@ -145,6 +179,9 @@ def predictions_to_segments(
     """
     Convert binary frame predictions into speech segments.
 
+    Consecutive frames predicted as speech are merged into a single segment.
+    Segments shorter than ``min_speech_ms`` are discarded.
+
     Args:
         predictions: Binary frame predictions of shape ``[T]``.
         frame_shift_ms: Frame hop in milliseconds.
@@ -152,7 +189,17 @@ def predictions_to_segments(
 
     Returns:
         List of ``(start_sec, end_sec)`` speech segments.
+
+    Raises:
+        ValueError: If ``predictions`` is not 1D, or if timing arguments are invalid.
     """
+    if predictions.ndim != 1:
+        raise ValueError(f"Expected predictions with shape [T], got {tuple(predictions.shape)}.")
+    if frame_shift_ms <= 0:
+        raise ValueError(f"frame_shift_ms must be positive, got {frame_shift_ms}")
+    if min_speech_ms < 0:
+        raise ValueError(f"min_speech_ms must be non-negative, got {min_speech_ms}")
+
     segments: list[tuple[float, float]] = []
     start_idx: int | None = None
 

@@ -1,3 +1,3 @@
-from .causal_conv import CausalVAD
+from .causal_vad import CausalVAD
 
 __all__ = ["CausalVAD"]

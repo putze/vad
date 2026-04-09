@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 
+from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
 from vad.data.collate import pad_collate_fn
@@ -10,7 +13,15 @@ from vad.data.preprocessing import VADPreprocessor
 @dataclass(slots=True)
 class DataLoaderConfig:
     """
-    Configuration for DataLoader creation.
+    Configuration for PyTorch DataLoader creation.
+
+    Attributes:
+        batch_size: Number of samples per batch.
+        num_workers: Number of worker processes used for data loading.
+        pin_memory: Whether to pin host memory for faster device transfer.
+        train_shuffle: Whether to shuffle the training dataset.
+        drop_last_train: Whether to drop the last incomplete training batch.
+        persistent_workers: Whether worker processes stay alive across epochs.
     """
 
     batch_size: int = 16
@@ -20,24 +31,35 @@ class DataLoaderConfig:
     drop_last_train: bool = False
     persistent_workers: bool = False
 
+    def __post_init__(self) -> None:
+        """Validate DataLoader configuration values."""
+        if self.batch_size <= 0:
+            raise ValueError(f"`batch_size` must be positive, got {self.batch_size}")
+        if self.num_workers < 0:
+            raise ValueError(f"`num_workers` must be non-negative, got {self.num_workers}")
+
 
 def build_dataloader(
-    dataset: Dataset,
+    dataset: Dataset[tuple[Tensor, Tensor]],
     config: DataLoaderConfig,
     shuffle: bool = False,
     drop_last: bool = False,
 ) -> DataLoader:
     """
-    Build a DataLoader for a prepared dataset.
+    Build a DataLoader for an already processed dataset.
+
+    The dataset is expected to yield processed samples compatible with
+    ``pad_collate_fn``.
 
     Args:
-        dataset (Dataset): Dataset returning processed samples.
-        config (DataLoaderConfig): DataLoader settings.
-        shuffle (bool): Whether to shuffle samples.
-        drop_last (bool): Whether to drop the last incomplete batch.
+        dataset: Dataset yielding processed samples, typically
+            ``(features, labels)``.
+        config: DataLoader settings.
+        shuffle: Whether to shuffle dataset items.
+        drop_last: Whether to drop the last incomplete batch.
 
     Returns:
-        Configured DataLoader instance.
+        Configured ``DataLoader`` instance.
     """
     return DataLoader(
         dataset,
@@ -52,24 +74,27 @@ def build_dataloader(
 
 
 def build_processed_dataloader(
-    raw_dataset: Dataset,
+    raw_dataset: Dataset[tuple[Tensor, Tensor, int]],
     processor: VADPreprocessor,
     config: DataLoaderConfig,
     shuffle: bool = False,
     drop_last: bool = False,
 ) -> DataLoader:
     """
-    Build a DataLoader from a raw dataset by wrapping it in ProcessedVADDataset.
+    Build a DataLoader from a raw dataset by wrapping it in ``ProcessedVADDataset``.
+
+    Preprocessing is applied in the wrapped dataset's ``__getitem__``.
 
     Args:
-        raw_dataset (Dataset): Dataset returning (waveform, labels, sample_rate).
-        processor (VADPreprocessor): Preprocessor applied on each sample.
-        config (DataLoaderConfig): DataLoader configuration.
-        shuffle (bool): Whether to shuffle samples.
-        drop_last (bool): Whether to drop the last incomplete batch.
+        raw_dataset: Dataset yielding raw samples as
+            ``(waveform, labels, sample_rate)``.
+        processor: Preprocessing pipeline applied to each raw sample.
+        config: DataLoader configuration.
+        shuffle: Whether to shuffle dataset items.
+        drop_last: Whether to drop the last incomplete batch.
 
     Returns:
-        Configured DataLoader.
+        Configured ``DataLoader`` instance over processed samples.
     """
     dataset = ProcessedVADDataset(
         base_dataset=raw_dataset,
@@ -84,11 +109,18 @@ def build_processed_dataloader(
 
 
 def build_train_loader(
-    dataset: Dataset,
+    dataset: Dataset[tuple[Tensor, Tensor]],
     config: DataLoaderConfig,
 ) -> DataLoader:
     """
-    Build the training DataLoader from an already prepared dataset.
+    Build the training DataLoader from an already processed dataset.
+
+    Args:
+        dataset: Processed training dataset.
+        config: DataLoader configuration.
+
+    Returns:
+        Training ``DataLoader``.
     """
     return build_dataloader(
         dataset=dataset,
@@ -99,11 +131,18 @@ def build_train_loader(
 
 
 def build_eval_loader(
-    dataset: Dataset,
+    dataset: Dataset[tuple[Tensor, Tensor]],
     config: DataLoaderConfig,
 ) -> DataLoader:
     """
-    Build a validation or test DataLoader from an already prepared dataset.
+    Build a validation or test DataLoader from an already processed dataset.
+
+    Args:
+        dataset: Processed validation or test dataset.
+        config: DataLoader configuration.
+
+    Returns:
+        Evaluation ``DataLoader``.
     """
     return build_dataloader(
         dataset=dataset,
@@ -114,12 +153,20 @@ def build_eval_loader(
 
 
 def build_train_processed_loader(
-    raw_dataset: Dataset,
+    raw_dataset: Dataset[tuple[Tensor, Tensor, int]],
     processor: VADPreprocessor,
     config: DataLoaderConfig,
 ) -> DataLoader:
     """
     Build the training DataLoader directly from a raw dataset.
+
+    Args:
+        raw_dataset: Raw training dataset.
+        processor: Preprocessing pipeline applied per sample.
+        config: DataLoader configuration.
+
+    Returns:
+        Training ``DataLoader`` over processed samples.
     """
     return build_processed_dataloader(
         raw_dataset=raw_dataset,
@@ -131,12 +178,20 @@ def build_train_processed_loader(
 
 
 def build_eval_processed_loader(
-    raw_dataset: Dataset,
+    raw_dataset: Dataset[tuple[Tensor, Tensor, int]],
     processor: VADPreprocessor,
     config: DataLoaderConfig,
 ) -> DataLoader:
     """
     Build a validation or test DataLoader directly from a raw dataset.
+
+    Args:
+        raw_dataset: Raw validation or test dataset.
+        processor: Preprocessing pipeline applied per sample.
+        config: DataLoader configuration.
+
+    Returns:
+        Evaluation ``DataLoader`` over processed samples.
     """
     return build_processed_dataloader(
         raw_dataset=raw_dataset,
@@ -148,13 +203,22 @@ def build_eval_processed_loader(
 
 
 def build_dataloaders(
-    train_dataset: Dataset,
-    val_dataset: Dataset,
-    test_dataset: Dataset,
+    train_dataset: Dataset[tuple[Tensor, Tensor]],
+    val_dataset: Dataset[tuple[Tensor, Tensor]],
+    test_dataset: Dataset[tuple[Tensor, Tensor]],
     config: DataLoaderConfig,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     """
-    Build train, validation, and test loaders from prepared datasets.
+    Build train, validation, and test loaders from processed datasets.
+
+    Args:
+        train_dataset: Processed training dataset.
+        val_dataset: Processed validation dataset.
+        test_dataset: Processed test dataset.
+        config: DataLoader configuration.
+
+    Returns:
+        Tuple ``(train_loader, val_loader, test_loader)``.
     """
     return (
         build_train_loader(train_dataset, config),
@@ -164,14 +228,24 @@ def build_dataloaders(
 
 
 def build_processed_dataloaders(
-    train_raw_dataset: Dataset,
-    val_raw_dataset: Dataset,
-    test_raw_dataset: Dataset,
+    train_raw_dataset: Dataset[tuple[Tensor, Tensor, int]],
+    val_raw_dataset: Dataset[tuple[Tensor, Tensor, int]],
+    test_raw_dataset: Dataset[tuple[Tensor, Tensor, int]],
     processor: VADPreprocessor,
     config: DataLoaderConfig,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     """
     Build train, validation, and test loaders directly from raw datasets.
+
+    Args:
+        train_raw_dataset: Raw training dataset.
+        val_raw_dataset: Raw validation dataset.
+        test_raw_dataset: Raw test dataset.
+        processor: Preprocessing pipeline applied per sample.
+        config: DataLoader configuration.
+
+    Returns:
+        Tuple ``(train_loader, val_loader, test_loader)``.
     """
     return (
         build_train_processed_loader(train_raw_dataset, processor, config),

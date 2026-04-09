@@ -16,15 +16,15 @@ from vad.inference.utils import (
 @dataclass(slots=True)
 class StreamingPrediction:
     """
-    Container for frame-level predictions emitted for one audio chunk.
+    Container for frame-level predictions emitted for one streaming update.
 
     Attributes:
-        probabilities: Speech probabilities for emitted frames.
-        predictions: Binary speech decisions for emitted frames.
-        start_frame: Index of the first emitted frame.
-        end_frame: Index after the last emitted frame.
-        start_time_sec: Start time of the emitted segment in seconds.
-        end_time_sec: End time of the emitted segment in seconds.
+        probabilities: Speech probabilities for newly emitted frames.
+        predictions: Binary speech decisions for newly emitted frames.
+        start_frame: Global index of the first emitted frame.
+        end_frame: Global index one past the last emitted frame.
+        start_time_sec: Start time of the emitted frame range in seconds.
+        end_time_sec: End time of the emitted frame range in seconds.
     """
 
     probabilities: Tensor
@@ -36,7 +36,22 @@ class StreamingPrediction:
 
 
 class StreamingVADInferencer:
-    """Run stateful chunk-based VAD inference on streaming audio."""
+    """
+    Run stateful chunk-based VAD inference on streaming audio.
+
+    This implementation accumulates all received audio, re-extracts features
+    from the full buffered waveform, runs the model on the full feature
+    sequence, and emits only frames that have not been returned previously.
+
+    This design prioritizes correctness and simplicity:
+        - frame indexing stays globally consistent
+        - no fragile bookkeeping is needed when trimming the waveform buffer
+        - no assumptions are required about the feature extractor's exact
+          frame/window alignment beyond its hop length
+
+    The tradeoff is that inference cost grows with stream duration because the
+    full waveform is reprocessed on each update.
+    """
 
     def __init__(
         self,
@@ -47,45 +62,65 @@ class StreamingVADInferencer:
         hop_length: int = 160,
         threshold: float = 0.5,
         min_buffer_samples: int = 400,
-        feature_context_frames: int = 20,
         device: torch.device | None = None,
     ) -> None:
-        """Initialize the streaming inference pipeline.
+        """
+        Initialize the streaming inference pipeline.
 
         Args:
             model: Trained VAD model.
-            feature_extractor: Feature extractor used on buffered audio.
+            feature_extractor: Feature extractor applied to the buffered audio.
+                It must return features with shape ``[T, F]``.
             sample_rate: Expected sample rate in Hz.
-            hop_length: Feature hop length in samples.
-            threshold: Decision threshold applied to speech probabilities.
-            min_buffer_samples: Minimum buffered samples before inference.
-            feature_context_frames: Number of past feature frames kept as
-                left context.
+            hop_length: Feature hop length in samples. This is used to convert
+                frame indices to timestamps.
+            threshold: Probability threshold for speech detection.
+            min_buffer_samples: Minimum number of buffered samples required
+                before attempting inference.
             device: Torch device used for inference.
+
+        Raises:
+            ValueError: If any numeric parameter is invalid.
         """
+        if sample_rate <= 0:
+            raise ValueError(f"sample_rate must be positive, got {sample_rate}")
+        if hop_length <= 0:
+            raise ValueError(f"hop_length must be positive, got {hop_length}")
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError(f"threshold must be in [0, 1], got {threshold}")
+        if min_buffer_samples < 0:
+            raise ValueError(f"min_buffer_samples must be non-negative, got {min_buffer_samples}")
+
         self.model = model.eval()
         self.feature_extractor = feature_extractor
         self.sample_rate = sample_rate
         self.hop_length = hop_length
         self.threshold = threshold
         self.min_buffer_samples = min_buffer_samples
-        self.feature_context_frames = feature_context_frames
         self.device = device or torch.device("cpu")
 
         self.model.to(self.device)
         self.reset()
 
     def reset(self) -> None:
-        """Reset the internal streaming state."""
+        """
+        Reset the internal streaming state.
+
+        This clears the buffered waveform and the counter tracking how many
+        frame predictions have already been emitted.
+        """
         self.sample_buffer = torch.empty(0, dtype=torch.float32)
         self.num_samples_seen = 0
         self.num_frames_emitted = 0
-        self.left_context_features = torch.empty((0, 0), dtype=torch.float32)
-        self.num_left_context_frames = 0
 
     @property
     def frame_hop_sec(self) -> float:
-        """Return the duration of one frame hop in seconds."""
+        """
+        Return the duration of one frame hop in seconds.
+
+        Returns:
+            Frame hop duration in seconds.
+        """
         return self.hop_length / self.sample_rate
 
     def _extract_features(self, waveform: Tensor) -> Tensor:
@@ -93,34 +128,33 @@ class StreamingVADInferencer:
         Extract frame-level features from a waveform.
 
         Args:
-            waveform: Mono waveform of shape [N].
+            waveform: Mono waveform of shape ``[N]``.
 
         Returns:
-            Feature tensor of shape [T, F].
+            Feature tensor of shape ``[T, F]``.
+
+        Raises:
+            ValueError: If the feature extractor returns an unexpected shape.
         """
         features = self.feature_extractor.extract(waveform, self.sample_rate)
         if features.ndim != 2:
             raise ValueError(
                 f"Expected feature tensor with shape [T, F], got {tuple(features.shape)}."
             )
-
         return features
 
-    @torch.inference_mode()
-    def process_chunk(self, chunk: Tensor) -> StreamingPrediction | None:
+    def _normalize_chunk(self, chunk: Tensor) -> Tensor:
         """
-        Process one incoming audio chunk.
+        Normalize an incoming chunk to shape ``[N]`` on CPU as float32.
 
         Args:
-            chunk: Audio chunk of shape ``[N]`` or ``[1, N]``.
+            chunk: Audio chunk with shape ``[N]`` or ``[1, N]``.
 
         Returns:
-            Prediction for newly emitted frames, or ``None`` if there is not
-            enough audio to emit output.
+            Mono chunk of shape ``[N]`` on CPU with dtype ``float32``.
 
         Raises:
-            ValueError: If the chunk shape is invalid or the model output
-                length does not match the feature length.
+            ValueError: If the chunk shape is unsupported.
         """
         if chunk.ndim == 2:
             if chunk.shape[0] != 1:
@@ -134,7 +168,32 @@ class StreamingVADInferencer:
                 f"Expected audio chunk with shape [N] or [1, N], got {tuple(chunk.shape)}."
             )
 
-        chunk = chunk.detach().cpu().float()
+        return chunk.detach().cpu().float()
+
+    @torch.inference_mode()
+    def process_chunk(self, chunk: Tensor) -> StreamingPrediction | None:
+        """
+        Process one incoming audio chunk.
+
+        The chunk is appended to the internal waveform buffer. Features are
+        recomputed on the full buffered waveform, the model is run on the full
+        feature sequence, and only the frames that have not already been
+        emitted are returned.
+
+        Args:
+            chunk: Audio chunk of shape ``[N]`` or ``[1, N]``.
+
+        Returns:
+            A ``StreamingPrediction`` for newly available frames, or ``None``
+            if there is not enough buffered audio or if no new frames became
+            available.
+
+        Raises:
+            ValueError: If the chunk shape is invalid or the model output shape
+                is unsupported.
+        """
+        chunk = self._normalize_chunk(chunk)
+
         self.sample_buffer = torch.cat([self.sample_buffer, chunk], dim=0)
         self.num_samples_seen += int(chunk.numel())
 
@@ -147,50 +206,29 @@ class StreamingVADInferencer:
         if num_current_frames == 0:
             return None
 
-        num_new_frames = num_current_frames - self.num_frames_emitted
-        if num_new_frames <= 0:
+        if num_current_frames <= self.num_frames_emitted:
             return None
 
-        if self.num_left_context_frames > 0:
-            model_features = torch.cat(
-                [self.left_context_features, current_features],
-                dim=0,
-            )
-        else:
-            model_features = current_features
-
-        model_input = prepare_conv1d_input(model_features, self.device)
+        model_input = prepare_conv1d_input(current_features, self.device)
         logits = self.model(model_input)
         logits = normalize_binary_logits(logits)
 
-        if self.num_left_context_frames > 0:
-            logits = logits[self.num_left_context_frames :]
-
-        if logits.shape[0] != current_features.shape[0]:
+        if logits.shape[0] != num_current_frames:
             raise ValueError(
-                "Model output length does not match feature length after "
-                "removing left context: "
+                "Model output length does not match feature length: "
                 f"logits={tuple(logits.shape)}, "
                 f"features={tuple(current_features.shape)}."
             )
 
         new_logits = logits[self.num_frames_emitted :]
+        if new_logits.numel() == 0:
+            return None
+
         probabilities, predictions = logits_to_predictions(new_logits, self.threshold)
 
         start_frame = self.num_frames_emitted
-        end_frame = start_frame + int(new_logits.shape[0])
+        end_frame = num_current_frames
         self.num_frames_emitted = end_frame
-
-        num_context_to_keep = min(
-            self.feature_context_frames,
-            current_features.shape[0],
-        )
-        self.left_context_features = current_features[-num_context_to_keep:].detach().cpu()
-        self.num_left_context_frames = num_context_to_keep
-
-        max_samples_to_keep = (self.feature_context_frames + 4) * self.hop_length
-        if self.sample_buffer.numel() > max_samples_to_keep:
-            self.sample_buffer = self.sample_buffer[-max_samples_to_keep:].clone()
 
         return StreamingPrediction(
             probabilities=probabilities,
@@ -204,18 +242,15 @@ class StreamingVADInferencer:
     @torch.inference_mode()
     def flush(self) -> StreamingPrediction | None:
         """
-        Process one incoming audio chunk.
+        Flush any remaining buffered audio through the pipeline.
 
-        Args:
-            chunk: Audio chunk of shape ``[N]`` or ``[1, N]``.
+        This method does not add new audio. It simply reruns inference on the
+        current buffer and returns any frame predictions that have not yet been
+        emitted.
 
         Returns:
-            Prediction for newly emitted frames, or ``None`` if there is not
-            enough audio to emit output.
-
-        Raises:
-            ValueError: If the chunk shape is invalid or the model output
-                length does not match the feature length.
+            A ``StreamingPrediction`` for any remaining newly emitted frames,
+            or ``None`` if nothing remains to emit.
         """
         if self.sample_buffer.numel() == 0:
             return None

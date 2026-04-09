@@ -3,14 +3,18 @@ from vad.training.metrics import BinaryClassificationMetrics
 
 def format_metrics(prefix: str, metrics: BinaryClassificationMetrics) -> str:
     """
-    Format aggregated metrics for readable console output.
+    Format aggregated metrics into a compact, human-readable string.
+
+    This is typically used for logging training or validation results
+    in the console.
 
     Args:
-        prefix: Label such as "train" or "val".
-        metrics: Aggregated metrics to format.
+        prefix: Short label identifying the split or phase
+            (e.g., "train", "val", "test").
+        metrics: Aggregated metrics object.
 
     Returns:
-        Human-readable summary string.
+        A formatted string summarizing key metrics.
     """
     return (
         f"{prefix:<5} | "

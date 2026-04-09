@@ -6,8 +6,8 @@ import torch
 import webrtcvad
 from torch import Tensor
 
-from vad.data.preprocessing.audio import AudioPreprocessor
-from vad.data.utils import ensure_mono_waveform
+from vad.data.audio_utils import ensure_mono_waveform
+from vad.data.preprocessing.waveform import WaveformPreprocessor
 
 
 @dataclass(slots=True)
@@ -25,7 +25,7 @@ class WebRTCVADBaseline:
     target_sample_rate: int = 16000
     name: str = "webrtcvad"
     vad: webrtcvad.Vad = field(init=False, repr=False)
-    audio_preprocessor: AudioPreprocessor = field(init=False, repr=False)
+    waveform_preprocessor: WaveformPreprocessor = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.frame_duration_ms not in (10, 20, 30):
@@ -35,11 +35,11 @@ class WebRTCVADBaseline:
         self.vad = webrtcvad.Vad(self.aggressiveness)
         if self.target_sample_rate < 0:
             raise ValueError("Target sample rate must be positive.")
-        self.audio_preprocessor = AudioPreprocessor(self.target_sample_rate)
+        self.waveform_preprocessor = WaveformPreprocessor(self.target_sample_rate)
 
     def _prepare_waveform(self, waveform: Tensor, sample_rate: int) -> Tensor:
         waveform = ensure_mono_waveform(waveform).float()
-        waveform, sample_rate = self.audio_preprocessor.process_waveform(
+        waveform, sample_rate = self.waveform_preprocessor.process_waveform(
             waveform,
             sample_rate,
         )

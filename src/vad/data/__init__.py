@@ -20,10 +20,8 @@ from .loaders import (
     build_train_loader,
     build_train_processed_loader,
 )
-from .samples import AudioSample
 
 __all__ = [
-    "AudioSample",
     "LibriVADConfig",
     "DatasetConfig",
     "DATASET_REGISTRY",

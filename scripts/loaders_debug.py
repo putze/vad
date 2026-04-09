@@ -240,7 +240,7 @@ def build_processor(config: DebugConfig) -> src.vad.data.preprocessing.VADPrepro
     """
     Build the preprocessing pipeline used for debugging.
     """
-    audio_preprocessor = src.vad.data.preprocessing.AudioPreprocessor(
+    waveform_preprocessor = src.vad.data.preprocessing.WaveformPreprocessor(
         target_sample_rate=config.target_sample_rate,
         normalize=config.normalize,
     )
@@ -260,7 +260,7 @@ def build_processor(config: DebugConfig) -> src.vad.data.preprocessing.VADPrepro
     )
 
     return src.vad.data.preprocessing.VADPreprocessor(
-        audio_preprocessor=audio_preprocessor,
+        waveform_preprocessor=waveform_preprocessor,
         feature_extractor=feature_extractor,
         label_aligner=label_aligner,
     )

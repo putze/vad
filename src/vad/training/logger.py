@@ -23,6 +23,7 @@ class TensorBoardLogger:
         epoch: int,
         train: BinaryClassificationMetrics,
         val: BinaryClassificationMetrics,
+        lr: float | None = None,
     ) -> None:
         """
         Log aggregated train/validation metrics for one epoch.
@@ -31,15 +32,16 @@ class TensorBoardLogger:
             epoch: Epoch number.
             train: Training metrics.
             val: Validation metrics.
+            lr: Optional learning rate to log.
         """
-        # --- Core metrics ---
+        # Core metrics
         self._log_pair("loss", train.loss, val.loss, epoch)
         self._log_pair("f1", train.f1, val.f1, epoch)
         self._log_pair("precision", train.precision, val.precision, epoch)
         self._log_pair("recall", train.recall, val.recall, epoch)
         self._log_pair("accuracy", train.accuracy, val.accuracy, epoch)
 
-        # --- VAD-specific metrics ---
+        # VAD-specific metrics
         self._log_pair(
             "false_positive_rate", train.false_positive_rate, val.false_positive_rate, epoch
         )
@@ -47,7 +49,11 @@ class TensorBoardLogger:
             "false_negative_rate", train.false_negative_rate, val.false_negative_rate, epoch
         )
 
-        # --- Confusion matrix counts (validation only, usually more relevant) ---
+        # Learning rate
+        if lr is not None:
+            self.writer.add_scalar("lr", lr, epoch)
+
+        # Confusion matrix counts (validation)
         self.writer.add_scalar("confusion/val/tp", val.tp, epoch)
         self.writer.add_scalar("confusion/val/fp", val.fp, epoch)
         self.writer.add_scalar("confusion/val/tn", val.tn, epoch)

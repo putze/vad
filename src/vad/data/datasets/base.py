@@ -13,7 +13,13 @@ from vad.data.file_utils import load_audio
 
 
 class VADSampleProtocol(Protocol):
-    """Protocol for dataset samples containing audio and label paths."""
+    """
+    Protocol for dataset sample metadata.
+
+    Any sample used by ``BaseVADDataset`` must provide paths to:
+    - an audio file,
+    - a NumPy label file containing sample-level speech labels.
+    """
 
     audio_path: Path
     label_path: Path
@@ -22,21 +28,42 @@ class VADSampleProtocol(Protocol):
 SampleType = TypeVar("SampleType", bound=VADSampleProtocol)
 
 
-class BaseVADDataset(Dataset, Generic[SampleType]):
+class BaseVADDataset(Dataset[tuple[Tensor, Tensor, int]], Generic[SampleType]):
     """
-    Base dataset class for Voice Activity Detection (VAD).
+    Base dataset for sample-level voice activity detection.
 
-    Handles loading of audio waveforms and corresponding label arrays.
+    Each item loads:
+    - a mono waveform of shape ``[num_samples]``,
+    - a 1D label tensor of shape ``[num_samples]``,
+    - the sample rate in Hz.
+
+    This dataset assumes labels are defined at the sample level, not the frame
+    level. Small off-by-one mismatches between waveform and label lengths are
+    tolerated and resolved by cropping both to the shorter length.
     """
 
-    def __init__(self, samples: Sequence[SampleType]) -> None:
+    def __init__(
+        self,
+        samples: Sequence[SampleType],
+        max_length_mismatch: int = 1,
+    ) -> None:
         """
-        Initialize VAD Dataset.
+        Initialize the dataset.
 
         Args:
-            samples (Sequence[SampleType]): Collection of dataset samples.
+            samples: Collection of dataset samples.
+            max_length_mismatch: Maximum allowed absolute difference between
+                waveform and label lengths. If the mismatch is within this
+                threshold, both are cropped to the shorter length. Larger
+                mismatches raise an error.
         """
+        if max_length_mismatch < 0:
+            raise ValueError(
+                f"`max_length_mismatch` must be non-negative, got {max_length_mismatch}"
+            )
+
         self.samples = list(samples)
+        self.max_length_mismatch = max_length_mismatch
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset."""
@@ -44,13 +71,17 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
 
     def _load_labels(self, path: Path) -> Tensor:
         """
-        Load label array from a .npy file.
+        Load sample-level labels from a ``.npy`` file.
 
         Args:
-            path (Path): Path to label file.
+            path: Path to the label file.
 
         Returns:
-            Tensor: Label tensor.
+            A float tensor of shape ``[num_samples]``.
+
+        Raises:
+            RuntimeError: If the file cannot be loaded.
+            ValueError: If the loaded array is not one-dimensional.
         """
         try:
             labels = np.load(path)
@@ -68,13 +99,20 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
 
     def __getitem__(self, index: int) -> tuple[Tensor, Tensor, int]:
         """
-        Retrieve one raw dataset sample.
+        Load one dataset item.
 
         Args:
-            index (int): Sample index.
+            index: Sample index.
 
         Returns:
-            tuple[Tensor, Tensor, int]: Waveform, labels, and sample rate.
+            A tuple ``(waveform, labels, sample_rate)`` where:
+            - ``waveform`` has shape ``[num_samples]``,
+            - ``labels`` has shape ``[num_samples]``,
+            - ``sample_rate`` is in Hz.
+
+        Raises:
+            ValueError: If waveform and label lengths differ by more than the
+                configured tolerance.
         """
         sample = self.samples[index]
 
@@ -83,15 +121,13 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
 
         waveform_len = waveform.shape[0]
         labels_len = labels.shape[0]
-
-        # Check if waveform and labels have the same lengths
         diff = abs(waveform_len - labels_len)
 
         if waveform_len != labels_len:
-            # Crop if small difference
-            if diff <= 1:
+            # Allow tiny mismatches caused by preprocessing or serialization.
+            if diff <= self.max_length_mismatch:
                 warnings.warn(
-                    f"Cropping audio/label mismatch: "
+                    "Cropping audio/label length mismatch: "
                     f"{sample.audio_path.name} waveform={waveform_len}, labels={labels_len}"
                 )
                 min_len = min(waveform_len, labels_len)
@@ -101,8 +137,8 @@ class BaseVADDataset(Dataset, Generic[SampleType]):
                 raise ValueError(
                     "Waveform and labels must have the same length, "
                     f"got waveform={waveform_len} and labels={labels_len} "
-                    f"(diff={diff}) "
-                    f"for sample audio={sample.audio_path} label={sample.label_path}"
+                    f"(diff={diff}) for sample "
+                    f"audio={sample.audio_path} label={sample.label_path}"
                 )
 
         return waveform, labels, sample_rate

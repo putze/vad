@@ -12,7 +12,15 @@ from vad.training.callbacks import MetricTracker
 
 class CheckpointManager:
     """
-    Save best and/or latest training checkpoints for one experiment run.
+    Manage checkpoint saving during training.
+
+    This class can save:
+    - the most recent checkpoint (``last.pt`` by default)
+    - the best checkpoint according to a monitored validation metric
+      (``best.pt`` by default)
+
+    The saved checkpoint includes model state, optimizer state, metrics,
+    and optional extra training state.
     """
 
     def __init__(
@@ -25,6 +33,22 @@ class CheckpointManager:
         best_filename: str = "best.pt",
         last_filename: str = "last.pt",
     ) -> None:
+        """
+        Initialize the checkpoint manager.
+
+        Args:
+            checkpoint_dir: Directory where checkpoint files will be saved.
+            monitor: Name of the metric used to determine whether a checkpoint
+                is the new best one.
+            mode: Optimization direction for the monitored metric:
+                - ``"min"`` means lower is better
+                - ``"max"`` means higher is better
+            min_delta: Minimum improvement required to replace the current
+                best checkpoint.
+            save_last: Whether to always save the latest checkpoint.
+            best_filename: Filename for the best checkpoint.
+            last_filename: Filename for the latest checkpoint.
+        """
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -33,9 +57,16 @@ class CheckpointManager:
         self.best_path = self.checkpoint_dir / best_filename
         self.last_path = self.checkpoint_dir / last_filename
         self.metric_tracker = MetricTracker(mode=mode, min_delta=min_delta)
+        self.best_epoch: int | None = None
 
     @property
     def best_value(self) -> float | None:
+        """
+        Return the best monitored metric value seen so far.
+
+        Returns:
+            The best metric value, or None if no checkpoint has been evaluated yet.
+        """
         return self.metric_tracker.best_value
 
     def _build_state(
@@ -47,6 +78,20 @@ class CheckpointManager:
         metrics: dict[str, float],
         extra_state: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """
+        Build the checkpoint payload for the current training state.
+
+        Args:
+            epoch: Current epoch number.
+            model: Model whose parameters should be saved.
+            optimizer: Optimizer whose internal state should be saved.
+            metrics: Dictionary of metrics computed for the current epoch.
+            extra_state: Optional additional state to include, such as
+                scheduler state, scaler state, random seeds, or configuration.
+
+        Returns:
+            A dictionary ready to be serialized with ``torch.save()``.
+        """
         state: dict[str, Any] = {
             "epoch": epoch,
             "monitor": self.monitor,
@@ -71,8 +116,23 @@ class CheckpointManager:
         """
         Save checkpoints for the current epoch.
 
+        The method checks whether the monitored metric improved. If so,
+        it updates the best checkpoint. Independently, it can also save
+        the latest checkpoint if ``save_last=True``.
+
+        Args:
+            epoch: Current epoch number.
+            model: Model whose parameters should be saved.
+            optimizer: Optimizer whose internal state should be saved.
+            metrics: Dictionary of current epoch metrics. It must contain
+                the monitored metric specified by ``self.monitor``.
+            extra_state: Optional additional state to include in the checkpoint.
+
         Returns:
-            bool: True if a new best checkpoint was saved.
+            True if a new best checkpoint was saved, otherwise False.
+
+        Raises:
+            KeyError: If the monitored metric is missing from ``metrics``.
         """
         if self.monitor not in metrics:
             raise KeyError(

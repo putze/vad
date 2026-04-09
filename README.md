@@ -1,5 +1,8 @@
 # Voice Activity Detection
 
+## RTD Documentation:
+Documentation: https://vad.readthedocs.io/
+
 ## Problem definition
 
 - output type: frame level (every 10 ms)

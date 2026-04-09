@@ -1,28 +1,49 @@
 from __future__ import annotations
 
-import torch
 from torch import Tensor
+
+from vad.training.metrics import BinaryClassificationMetrics, VADMetricsTracker
 
 
 def binary_metrics(pred: Tensor, target: Tensor) -> dict[str, float]:
-    pred = pred.to(torch.int64)
-    target = target.to(torch.int64)
+    """
+    Compute binary metrics from hard predictions and targets.
 
-    tp = int(((pred == 1) & (target == 1)).sum())
-    tn = int(((pred == 0) & (target == 0)).sum())
-    fp = int(((pred == 1) & (target == 0)).sum())
-    fn = int(((pred == 0) & (target == 1)).sum())
+    This is a lightweight compatibility wrapper around ``VADMetricsTracker``.
+    Both inputs must be binary tensors with identical shape.
 
-    precision = tp / (tp + fp) if (tp + fp) else 0.0
-    recall = tp / (tp + fn) if (tp + fn) else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
-    acc = (tp + tn) / max(tp + tn + fp + fn, 1)
+    Args:
+        pred: Binary predictions.
+        target: Binary ground-truth labels.
 
+    Returns:
+        Dictionary containing accuracy, precision, recall, F1 score,
+        false positive rate, and false negative rate.
+    """
+    tracker = VADMetricsTracker()
+    tracker.update_from_predictions(
+        predictions=pred.unsqueeze(0),
+        targets=target.unsqueeze(0),
+    )
+    metrics = tracker.compute()
+    return metrics_to_dict(metrics)
+
+
+def metrics_to_dict(metrics: BinaryClassificationMetrics) -> dict[str, float]:
+    """
+    Convert a ``BinaryClassificationMetrics`` object into a plain dictionary.
+
+    Args:
+        metrics: Aggregated metrics object.
+
+    Returns:
+        Dictionary representation of the main scalar metrics.
+    """
     return {
-        "accuracy": acc,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "false_positive_rate": fp / max(fp + tn, 1),
-        "false_negative_rate": fn / max(fn + tp, 1),
+        "accuracy": metrics.accuracy,
+        "precision": metrics.precision,
+        "recall": metrics.recall,
+        "f1": metrics.f1,
+        "false_positive_rate": metrics.false_positive_rate,
+        "false_negative_rate": metrics.false_negative_rate,
     }

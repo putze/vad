@@ -7,7 +7,14 @@ from torch import Tensor
 
 class LogMelFeatureExtractor:
     """
-    Extract log-Mel spectrogram features from audio waveforms.
+    Extract log-Mel spectrogram features from mono waveforms.
+
+    The extractor expects input waveforms to already be sampled at the
+    configured ``sample_rate``. It computes a Mel spectrogram on the waveform
+    and returns its natural logarithm.
+
+    Output features follow the shape convention:
+    ``[n_mels, num_frames]``.
     """
 
     def __init__(
@@ -21,14 +28,20 @@ class LogMelFeatureExtractor:
         eps: float = 1e-6,
     ) -> None:
         """
+        Initialize the log-Mel feature extractor.
+
         Args:
-            sample_rate (int): Expected input sample rate.
-            frame_length (int): Window size (in samples) for STFT.
-            hop_length (int): Hop size (in samples) between frames.
-            n_fft (int): FFT size.
-            n_mels (int): Number of Mel filter banks.
-            center (bool): Whether STFT-style framing is centered.
-            eps (float): Minimum value before applying logarithm for numerical stability.
+            sample_rate: Expected input sample rate in Hz.
+            frame_length: Analysis window length in samples.
+            hop_length: Frame hop in samples.
+            n_fft: FFT size.
+            n_mels: Number of Mel filter banks.
+            center: Whether to use centered STFT-style framing.
+            eps: Minimum value used before applying the logarithm for
+                numerical stability.
+
+        Raises:
+            ValueError: If any configuration value is not positive.
         """
         if sample_rate <= 0:
             raise ValueError(f"`sample_rate` must be positive, got {sample_rate}")
@@ -42,6 +55,10 @@ class LogMelFeatureExtractor:
             raise ValueError(f"`n_mels` must be positive, got {n_mels}")
         if eps <= 0:
             raise ValueError(f"`eps` must be positive, got {eps}")
+        if frame_length > n_fft:
+            raise ValueError(
+                f"`frame_length` must be <= `n_fft`, got frame_length={frame_length}, n_fft={n_fft}"
+            )
 
         self.sample_rate = sample_rate
         self.frame_length = frame_length
@@ -63,31 +80,36 @@ class LogMelFeatureExtractor:
 
     def __call__(self, waveform: Tensor) -> Tensor:
         """
-        Compute log-Mel spectrogram features.
+        Compute log-Mel features from a mono waveform.
 
         Args:
-            waveform (Tensor): Input mono waveform [T].
+            waveform: Input waveform of shape ``[num_samples]``.
 
         Returns:
-            Tensor: Log-Mel features [n_mels, num_frames].
+            Log-Mel feature tensor of shape ``[n_mels, num_frames]``.
+
+        Raises:
+            ValueError: If the input waveform is not one-dimensional.
         """
         if waveform.ndim != 1:
-            raise ValueError(f"Expected 1D waveform [T], got shape {tuple(waveform.shape)}")
+            raise ValueError(
+                f"Expected 1D waveform [num_samples], got shape {tuple(waveform.shape)}"
+            )
 
         waveform = waveform.float()
 
         mel = self.transform(waveform.unsqueeze(0)).squeeze(0)
-        mel = torch.clamp(mel, min=self.eps)
-        log_mel = torch.log(mel)
+        mel = torch.clamp(mel, min=self.eps)  # Clamp to avoid log(0).
+        log_mel = torch.log(mel)  # Natural log
 
         return log_mel
 
     @property
     def frame_hop_seconds(self) -> float:
         """
-        Duration (in seconds) between consecutive feature frames.
+        Return the temporal spacing between consecutive feature frames.
 
         Returns:
-            float: Hop length in seconds.
+            Frame hop duration in seconds.
         """
         return self.hop_length / self.sample_rate

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch import Tensor
 
-from vad.data.utils import ensure_mono_waveform
+from vad.data.audio_utils import ensure_mono_waveform
 from vad.visualization.style import set_plot_style
 
 

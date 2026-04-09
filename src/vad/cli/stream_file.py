@@ -6,9 +6,9 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
+from vad.data.audio_utils import ensure_mono_waveform
 from vad.data.file_utils import load_audio
-from vad.data.preprocessing import AudioPreprocessor, LogMelFeatureExtractor
-from vad.data.utils import ensure_mono_waveform
+from vad.data.preprocessing import LogMelFeatureExtractor, WaveformPreprocessor
 from vad.inference.streaming import StreamingVADInferencer
 from vad.inference.utils import ensure_time_major_features
 from vad.models.loading import load_model
@@ -19,7 +19,7 @@ class StreamingFeatureExtractorAdapter:
 
     def __init__(
         self,
-        audio_preprocessor: AudioPreprocessor,
+        waveform_preprocessor: WaveformPreprocessor,
         feature_extractor: LogMelFeatureExtractor,
         n_mels: int,
     ) -> None:
@@ -27,11 +27,11 @@ class StreamingFeatureExtractorAdapter:
         Initialize the streaming feature extractor adapter.
 
         Args:
-            audio_preprocessor: Waveform preprocessor.
+            waveform_preprocessor: Waveform preprocessor.
             feature_extractor: Frame-level feature extractor.
             n_mels: Expected feature dimension.
         """
-        self.audio_preprocessor = audio_preprocessor
+        self.waveform_preprocessor = waveform_preprocessor
         self.feature_extractor = feature_extractor
         self.n_mels = n_mels
 
@@ -47,7 +47,7 @@ class StreamingFeatureExtractorAdapter:
             Feature tensor of shape ``[T, F]``.
         """
         waveform = ensure_mono_waveform(waveform)
-        waveform, sample_rate = self.audio_preprocessor.process_waveform(
+        waveform, sample_rate = self.waveform_preprocessor.process_waveform(
             waveform,
             sample_rate,
         )
@@ -145,7 +145,7 @@ def main() -> None:
     frame_length = round(args.target_sample_rate * args.frame_length_ms / 1000.0)
     hop_length = round(args.target_sample_rate * args.frame_shift_ms / 1000.0)
 
-    audio_preprocessor = AudioPreprocessor(
+    waveform_preprocessor = WaveformPreprocessor(
         target_sample_rate=args.target_sample_rate,
     )
     feature_extractor = LogMelFeatureExtractor(
@@ -156,7 +156,7 @@ def main() -> None:
         n_mels=args.n_mels,
     )
     extractor = StreamingFeatureExtractorAdapter(
-        audio_preprocessor=audio_preprocessor,
+        waveform_preprocessor=waveform_preprocessor,
         feature_extractor=feature_extractor,
         n_mels=args.n_mels,
     )

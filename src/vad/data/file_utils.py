@@ -1,24 +1,25 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 import torchaudio
 from torch import Tensor
 
-from vad.data.utils import ensure_mono_waveform
+from vad.data.audio_utils import ensure_mono_waveform
 
 
 def is_audio_file(path: Path, extensions: tuple[str, ...]) -> bool:
     """
-    Check whether a path is a valid audio file based on extension.
+    Check whether a path points to an audio file with an allowed extension.
 
     Args:
-        path (Path): File path to check.
-        extensions (tuple[str, ...]): Allowed audio file extensions.
+        path: File path to check.
+        extensions: Allowed file extensions, compared case-insensitively.
 
     Returns:
-        bool: True if valid audio file, else False.
+        ``True`` if the path is a file and its extension is allowed,
+        otherwise ``False``.
     """
     return path.is_file() and path.suffix.lower() in extensions
 
@@ -28,40 +29,46 @@ def iter_audio_files(
     extensions: tuple[str, ...] = (".wav",),
 ) -> list[Path]:
     """
-    Recursively collect all audio files under a directory.
+    Recursively collect audio files under a directory.
 
     Args:
-        root (Path): Root directory.
-        extensions (tuple[str, ...]): Allowed audio file extensions.
+        root: Root directory to scan.
+        extensions: Allowed file extensions, compared case-insensitively.
 
     Returns:
-        list[Path]: Sorted list of audio file paths.
+        Sorted list of matching audio file paths.
+
+    Raises:
+        ValueError: If ``root`` does not exist or is not a directory.
     """
     if not root.exists() or not root.is_dir():
         raise ValueError(f"Invalid directory: {root}")
 
-    extensions = tuple(ext.lower() for ext in extensions)
+    normalized_extensions = tuple(ext.lower() for ext in extensions)
 
-    return [path for path in sorted(root.rglob("*")) if is_audio_file(path, extensions)]
+    return [path for path in sorted(root.rglob("*")) if is_audio_file(path, normalized_extensions)]
 
 
 def match_audio_label_pairs(
     audio_files: Iterable[Path],
-    map_fn,
+    map_fn: Callable[[Path], Path],
 ) -> tuple[list[tuple[Path, Path]], int]:
     """
-    Match audio files with corresponding label files.
+    Match audio files with their corresponding label files.
 
     Args:
-        audio_files (Iterable[Path]): Audio file paths.
-        map_fn (Callable[[Path], Path]): Function mapping audio_path → label_path.
+        audio_files: Iterable of audio file paths.
+        map_fn: Function that maps an audio path to the expected label path.
 
     Returns:
-        tuple[list[tuple[Path, Path]], int]:
-            Matched (audio_path, label_path) pairs and count of missing labels.
+        A tuple ``(pairs, missing_count)`` where:
+        - ``pairs`` is a list of ``(audio_path, label_path)`` tuples for files
+          whose labels exist,
+        - ``missing_count`` is the number of audio files without a matching
+          label file.
     """
     pairs: list[tuple[Path, Path]] = []
-    missing = 0
+    missing_count = 0
 
     for audio_path in audio_files:
         label_path = map_fn(audio_path)
@@ -69,27 +76,30 @@ def match_audio_label_pairs(
         if label_path.exists():
             pairs.append((audio_path, label_path))
         else:
-            missing += 1
+            missing_count += 1
 
-    return pairs, missing
+    return pairs, missing_count
 
 
-def load_audio(
-    path: str | Path,
-) -> tuple[Tensor, int]:
+def load_audio(path: str | Path) -> tuple[Tensor, int]:
     """
     Load an audio file and return a mono waveform.
+
+    Audio is loaded with torchaudio, which returns a tensor of shape
+    ``[channels, num_samples]``. Multi-channel audio is converted to mono by
+    averaging channels.
 
     Args:
         path: Path to the audio file.
 
     Returns:
-        waveform: Mono waveform of shape [N].
-        sample_rate: Sample rate in Hz.
+        A tuple ``(waveform, sample_rate)`` where:
+        - ``waveform`` has shape ``[num_samples]``,
+        - ``sample_rate`` is in Hz.
 
     Raises:
-        RuntimeError: If loading fails.
-        ValueError: If the waveform shape is invalid.
+        RuntimeError: If the audio file cannot be loaded.
+        ValueError: If the loaded waveform does not have the expected shape.
     """
     path = Path(path)
 
@@ -98,14 +108,12 @@ def load_audio(
     except Exception as e:
         raise RuntimeError(f"Failed to load audio file: {path}") from e
 
-    # Expect [channels, time]
     if waveform.ndim != 2:
         raise ValueError(
-            f"Expected waveform shape [channels, time], "
+            "Expected waveform with shape [channels, num_samples], "
             f"got {tuple(waveform.shape)} for file: {path}"
         )
 
-    # Convert to mono
     waveform = ensure_mono_waveform(waveform)
 
     return waveform, sample_rate

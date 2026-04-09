@@ -6,9 +6,9 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
+from vad.data.audio_utils import ensure_mono_waveform
 from vad.data.file_utils import load_audio
-from vad.data.preprocessing import AudioPreprocessor, LogMelFeatureExtractor
-from vad.data.utils import ensure_mono_waveform
+from vad.data.preprocessing import LogMelFeatureExtractor, WaveformPreprocessor
 from vad.inference.utils import (
     ensure_time_major_features,
     logits_to_predictions,
@@ -24,24 +24,29 @@ class OfflineVADPrediction:
     Container for frame-level offline VAD outputs.
 
     Attributes:
-        waveform: Input waveform used for inference.
-        sample_rate: Waveform sample rate in Hz.
+        waveform: Original input waveform provided for inference.
+        sample_rate: Sample rate of ``waveform`` in Hz.
         frame_times: Time stamp for each output frame in seconds.
-        probabilities: Speech probabilities for each frame.
-        predictions: Binary speech decisions for each frame.
+        probabilities: Frame-level speech probabilities.
+        predictions: Frame-level binary speech decisions.
         duration_seconds: Total waveform duration in seconds.
     """
 
-    waveform: torch.Tensor
+    waveform: Tensor
     sample_rate: int
-    frame_times: torch.Tensor
-    probabilities: torch.Tensor
-    predictions: torch.Tensor
+    frame_times: Tensor
+    probabilities: Tensor
+    predictions: Tensor
     duration_seconds: float
 
 
 class OfflineVADInferencer:
-    """Run offline inference with a trained model."""
+    """
+    Run offline VAD inference on complete audio inputs.
+
+    This class encapsulates the full inference pipeline:
+        waveform -> preprocessing -> feature extraction -> model -> predictions
+    """
 
     def __init__(
         self,
@@ -57,14 +62,28 @@ class OfflineVADInferencer:
         Initialize the offline inference pipeline.
 
         Args:
-            checkpoint_path: Path to the trained checkpoint.
+            checkpoint_path: Path to the trained model checkpoint.
             device: Torch device used for inference.
-            threshold: Decision threshold applied to speech probabilities.
-            target_sample_rate: Target sample rate in Hz.
+            threshold: Probability threshold for speech detection.
+            target_sample_rate: Target sample rate used by the preprocessing pipeline.
             n_mels: Number of mel-frequency bins.
             frame_length_ms: Analysis window length in milliseconds.
             frame_shift_ms: Frame hop in milliseconds.
+
+        Raises:
+            ValueError: If any numeric parameter is invalid.
         """
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError(f"threshold must be in [0, 1], got {threshold}")
+        if target_sample_rate <= 0:
+            raise ValueError(f"target_sample_rate must be positive, got {target_sample_rate}")
+        if n_mels <= 0:
+            raise ValueError(f"n_mels must be positive, got {n_mels}")
+        if frame_length_ms <= 0:
+            raise ValueError(f"frame_length_ms must be positive, got {frame_length_ms}")
+        if frame_shift_ms <= 0:
+            raise ValueError(f"frame_shift_ms must be positive, got {frame_shift_ms}")
+
         self.device = device
         self.threshold = threshold
         self.target_sample_rate = target_sample_rate
@@ -72,7 +91,7 @@ class OfflineVADInferencer:
         self.frame_length_ms = frame_length_ms
         self.frame_shift_ms = frame_shift_ms
 
-        self.audio_preprocessor = AudioPreprocessor(
+        self.waveform_preprocessor = WaveformPreprocessor(
             target_sample_rate=target_sample_rate,
         )
 
@@ -91,18 +110,22 @@ class OfflineVADInferencer:
 
     def _prepare_features(self, waveform: Tensor, sample_rate: int) -> Tensor:
         """
-        Convert a waveform into model-ready input features.
+        Convert a waveform into model-ready Conv1d input.
+
+        The waveform is converted to mono if needed, resampled to the target
+        sample rate, transformed into log-mel features, normalized to time-major
+        layout, and finally reshaped to Conv1d format.
 
         Args:
             waveform: Input waveform.
             sample_rate: Original waveform sample rate in Hz.
 
         Returns:
-            Input tensor of shape ``[1, n_mels, T]``.
+            Tensor of shape ``[1, n_mels, T]`` ready for the model.
         """
         waveform = ensure_mono_waveform(waveform)
 
-        waveform, sample_rate = self.audio_preprocessor.process_waveform(
+        waveform, sample_rate = self.waveform_preprocessor.process_waveform(
             waveform,
             sample_rate,
         )
@@ -119,10 +142,11 @@ class OfflineVADInferencer:
 
         Args:
             waveform: Input audio waveform.
-            sample_rate: Original waveform sample rate in Hz.
+            sample_rate: Sample rate of the input waveform in Hz.
 
         Returns:
-            Offline VAD prediction for the waveform.
+            An ``OfflineVADPrediction`` containing frame-level probabilities,
+            hard predictions, frame times, and basic waveform metadata.
         """
         duration_seconds = waveform.shape[-1] / sample_rate
         features = self._prepare_features(waveform, sample_rate)
@@ -145,7 +169,8 @@ class OfflineVADInferencer:
 
     @torch.inference_mode()
     def predict_file(self, audio_path: str | Path) -> OfflineVADPrediction:
-        """Run frame-level VAD on an audio file.
+        """
+        Run frame-level VAD on an audio file.
 
         Args:
             audio_path: Path to the input audio file.

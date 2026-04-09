@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -9,7 +11,14 @@ from vad.data.preprocessing import VADPreprocessor
 @dataclass(slots=True)
 class LibriVADConfig:
     """
-    Configuration for LibriVAD dataset creation.
+    Configuration for building a LibriVAD dataset.
+
+    Attributes:
+        results_root: Root directory containing audio files.
+        labels_root: Root directory containing sample-level label files.
+        datasets: Optional subset of LibriVAD source datasets to include.
+        splits: Optional subset of splits to include.
+        extensions: Allowed audio file extensions.
     """
 
     results_root: str | Path
@@ -19,15 +28,21 @@ class LibriVADConfig:
     extensions: tuple[str, ...] = (".wav",)
 
 
+# Alias kept for future extensibility. At present, only LibriVAD is supported.
 DatasetConfig = LibriVADConfig
 DatasetBuilder = Callable[[DatasetConfig], BaseVADDataset]
 
 
 def _build_librivad(config: LibriVADConfig) -> BaseVADDataset:
     """
-    Build a LibriVAD dataset from its configuration.
-    """
+    Build a raw LibriVAD dataset from configuration.
 
+    Args:
+        config: Configuration describing where to find audio and label files.
+
+    Returns:
+        A ``LibriVADDataset`` instance.
+    """
     return LibriVADDataset(
         results_root=config.results_root,
         labels_root=config.labels_root,
@@ -44,7 +59,18 @@ DATASET_REGISTRY: dict[str, DatasetBuilder] = {
 
 def get_dataset_builder(dataset_name: str) -> DatasetBuilder:
     """
-    Return the builder registered for a dataset name.
+    Return the dataset builder registered for a given name.
+
+    Dataset names are matched case-insensitively.
+
+    Args:
+        dataset_name: Name of the dataset builder to retrieve.
+
+    Returns:
+        Builder function associated with the dataset name.
+
+    Raises:
+        ValueError: If no builder is registered for the requested name.
     """
     key = dataset_name.lower()
 
@@ -60,7 +86,14 @@ def build_raw_dataset(
     config: DatasetConfig,
 ) -> BaseVADDataset:
     """
-    Build a raw dataset from a name and configuration.
+    Build a raw dataset from its name and configuration.
+
+    Args:
+        dataset_name: Registered dataset name.
+        config: Dataset configuration object.
+
+    Returns:
+        Raw dataset yielding waveform, sample-level labels, and sample rate.
     """
     builder = get_dataset_builder(dataset_name)
     return builder(config)
@@ -72,7 +105,18 @@ def build_processed_dataset(
     processor: VADPreprocessor,
 ) -> ProcessedVADDataset:
     """
-    Build a processed dataset from a name and configuration.
+    Build a processed dataset from its name and configuration.
+
+    The returned dataset is a lazy wrapper around the raw dataset: preprocessing
+    is applied in ``__getitem__`` rather than precomputed in advance.
+
+    Args:
+        dataset_name: Registered dataset name.
+        config: Dataset configuration object.
+        processor: Preprocessing pipeline applied to each raw sample.
+
+    Returns:
+        Processed dataset yielding model-ready features and frame-level labels.
     """
     raw_dataset = build_raw_dataset(
         dataset_name=dataset_name,
@@ -92,6 +136,15 @@ def build_raw_datasets(
 ) -> tuple[BaseVADDataset, BaseVADDataset, BaseVADDataset]:
     """
     Build raw train, validation, and test datasets.
+
+    Args:
+        dataset_name: Registered dataset name.
+        train_config: Configuration for the training split.
+        val_config: Configuration for the validation split.
+        test_config: Configuration for the test split.
+
+    Returns:
+        Tuple ``(train_dataset, val_dataset, test_dataset)`` of raw datasets.
     """
     return (
         build_raw_dataset(dataset_name, train_config),
@@ -109,6 +162,16 @@ def build_processed_datasets(
 ) -> tuple[ProcessedVADDataset, ProcessedVADDataset, ProcessedVADDataset]:
     """
     Build processed train, validation, and test datasets.
+
+    Args:
+        dataset_name: Registered dataset name.
+        train_config: Configuration for the training split.
+        val_config: Configuration for the validation split.
+        test_config: Configuration for the test split.
+        processor: Preprocessing pipeline applied to each raw sample.
+
+    Returns:
+        Tuple ``(train_dataset, val_dataset, test_dataset)`` of processed datasets.
     """
     return (
         build_processed_dataset(dataset_name, train_config, processor),

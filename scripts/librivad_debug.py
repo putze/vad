@@ -8,10 +8,10 @@ from torch import Tensor
 from src.vad.data.datasets.librivad import LibriVADDataset
 from src.vad.data.file_utils import load_audio
 from src.vad.data.preprocessing import (
-    AudioPreprocessor,
     LabelAligner,
     LogMelFeatureExtractor,
     VADPreprocessor,
+    WaveformPreprocessor,
 )
 from src.vad.visualization import (
     debug_plot_alignment,
@@ -54,7 +54,7 @@ class LibriVADDebugger:
             splits=config.splits,
         )
 
-        self.audio_preprocessor = AudioPreprocessor(
+        self.waveform_preprocessor = WaveformPreprocessor(
             target_sample_rate=config.target_sample_rate,
             normalize=config.normalize,
         )
@@ -74,7 +74,7 @@ class LibriVADDebugger:
         )
 
         self.preprocessor = VADPreprocessor(
-            audio_preprocessor=self.audio_preprocessor,
+            waveform_preprocessor=self.waveform_preprocessor,
             feature_extractor=self.feature_extractor,
             label_aligner=self.label_aligner,
         )

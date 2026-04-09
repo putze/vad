@@ -9,47 +9,65 @@ from torch.utils.data import Dataset
 from vad.data.preprocessing.preprocessing import VADPreprocessor
 
 
-class ProcessedVADDataset(Dataset):
+class ProcessedVADDataset(Dataset[tuple[Tensor, Tensor]]):
     """
-    Wrap a base VAD dataset and apply preprocessing.
+    Dataset wrapper that applies VAD preprocessing on top of a raw dataset.
 
-    Expects base samples as (waveform [T], labels [T], sample_rate),
-    and returns (features [n_mels, T], aligned_labels [T]).
+    The wrapped dataset is expected to yield raw samples as:
+
+    ``(waveform, labels, sample_rate)``
+
+    where:
+    - ``waveform`` has shape ``[num_samples]``,
+    - ``labels`` has shape ``[num_samples]`` and contains sample-level targets,
+    - ``sample_rate`` is given in Hz.
+
+    This wrapper applies ``VADPreprocessor`` to convert each raw sample into:
+
+    - ``features`` of shape ``[n_mels, num_frames]``,
+    - ``aligned_labels`` of shape ``[num_frames]``.
+
+    Here, ``num_frames`` refers to the frame axis after feature extraction and
+    label alignment, not the original waveform sample count.
     """
 
     def __init__(
         self,
-        base_dataset: Dataset,
+        base_dataset: Dataset[tuple[Tensor, Tensor, int]],
         processor: VADPreprocessor,
     ) -> None:
         """
+        Initialize the processed dataset wrapper.
+
         Args:
-            base_dataset (Dataset): Dataset yielding raw audio samples.
-            processor (VADPreprocessor): Preprocessing pipeline.
+            base_dataset: Dataset yielding raw samples as
+                ``(waveform, labels, sample_rate)``.
+            processor: Preprocessing pipeline that converts raw waveforms and
+                sample-level labels into model-ready features and frame-level
+                labels.
         """
         self.base_dataset = base_dataset
         self.processor = processor
 
     def __len__(self) -> int:
-        """
-        Return the number of samples in the dataset.
-        """
+        """Return the number of samples in the wrapped dataset."""
         return len(cast(Sized, self.base_dataset))
 
     def __getitem__(self, index: int) -> tuple[Tensor, Tensor]:
         """
-        Retrieve and preprocess a dataset sample.
+        Retrieve and preprocess one sample.
 
         Args:
-            index (int): Sample index.
+            index: Sample index.
 
         Returns:
-            tuple[Tensor, Tensor]:
-                - features: [n_mels, T]
-                - aligned_labels: [T]
+            A tuple ``(features, aligned_labels)`` where:
+            - ``features`` has shape ``[n_mels, num_frames]``,
+            - ``aligned_labels`` has shape ``[num_frames]``.
 
         Raises:
-            ValueError: If output shapes are invalid or mismatched.
+            ValueError: If the processor output has invalid dimensions or
+                inconsistent frame counts.
         """
         waveform, labels, sample_rate = self.base_dataset[index]
 
@@ -61,12 +79,13 @@ class ProcessedVADDataset(Dataset):
 
         if features.ndim != 2:
             raise ValueError(
-                f"Expected features with shape [n_mels, T], got {tuple(features.shape)}"
+                f"Expected features with shape [n_mels, num_frames], got {tuple(features.shape)}"
             )
 
         if aligned_labels.ndim != 1:
             raise ValueError(
-                f"Expected aligned labels with shape [T], got {tuple(aligned_labels.shape)}"
+                f"Expected aligned labels with shape [num_frames], "
+                f"got {tuple(aligned_labels.shape)}"
             )
 
         if features.shape[1] != aligned_labels.shape[0]:
@@ -76,4 +95,4 @@ class ProcessedVADDataset(Dataset):
                 f"labels={tuple(aligned_labels.shape)}"
             )
 
-        return features.float(), aligned_labels.long()
+        return features.float(), aligned_labels.float()

@@ -2,19 +2,33 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import List, Sequence
+from typing import Sequence
 
 from vad.data.datasets.base import BaseVADDataset
-from vad.data.file_utils import iter_audio_files
-from vad.data.samples import AudioSample
+from vad.data.datasets.samples import AudioExample
+from vad.data.file_utils import iter_audio_files, match_audio_label_pairs
 
 
-class LibriVADDataset(BaseVADDataset[AudioSample]):
+class LibriVADDataset(BaseVADDataset[AudioExample]):
     """
-    Dataset for LibriVAD audio files and their corresponding label files.
+    Dataset indexer for LibriVAD audio files and sample-level label files.
 
-    Supports multiple LibriVAD source datasets and splits, and builds
-    matched audio-label sample pairs.
+    This class scans selected LibriVAD datasets and splits, matches each audio
+    file to its corresponding ``.npy`` label file, and builds a list of
+    ``AudioSample`` objects for the base dataset.
+
+    Expected directory structure:
+
+    - audio files under:
+      ``results_root / dataset_name / split_name / ... / <utt_id>.wav``
+    - label files under:
+      ``labels_root / dataset_name / split_name / <speaker_id> / <chapter_id> / <utt_id>.npy``
+
+    where ``<utt_id>`` follows the LibriSpeech-style naming convention
+    ``speaker-chapter-utterance`` such as ``61-70968-0019``.
+
+    Missing dataset or split directories are ignored. Audio files without a
+    matching label file are skipped and counted.
     """
 
     def __init__(
@@ -26,12 +40,16 @@ class LibriVADDataset(BaseVADDataset[AudioSample]):
         extensions: tuple[str, ...] = (".wav",),
     ) -> None:
         """
+        Initialize the LibriVAD dataset index.
+
         Args:
-            results_root (str): Root directory containing noisy audio files.
-            labels_root (str): Root directory containing label files.
-            datasets (Sequence[str] | None): Dataset names to include.
-            splits (Sequence[str] | None): Split names to include.
-            extensions (tuple[str, ...]): Allowed audio file extensions.
+            results_root: Root directory containing audio files.
+            labels_root: Root directory containing label files.
+            datasets: Dataset names to include. If omitted, a default subset of
+                LibriVAD source datasets is used.
+            splits: Split names to include. If omitted, default train/dev/test
+                splits are used.
+            extensions: Allowed audio file extensions, matched case-insensitively.
         """
         self.results_root = Path(results_root)
         self.labels_root = Path(labels_root)
@@ -52,23 +70,26 @@ class LibriVADDataset(BaseVADDataset[AudioSample]):
                 "test-clean",
             ]
         )
-
         self.extensions = tuple(ext.lower() for ext in extensions)
-        samples = self._build_samples()
 
+        samples = self._build_samples()
         super().__init__(samples=samples)
 
-    def _build_samples(self) -> List[AudioSample]:
+    def _build_samples(self) -> list[AudioExample]:
         """
-        Build the list of matched audio-label samples.
+        Build the list of valid audio/label sample pairs.
+
+        The method scans all configured dataset/split directories, derives the
+        expected label path for each discovered audio file, and keeps only pairs
+        for which the label file exists.
 
         Returns:
-            List[AudioSample]: All valid audio/label pairs found.
+            List of matched ``AudioSample`` objects.
 
         Raises:
-            ValueError: If no matching pairs are found.
+            ValueError: If no valid audio/label pairs are found.
         """
-        samples: List[AudioSample] = []
+        samples: list[AudioExample] = []
         missing_labels = 0
 
         for dataset_name in self.datasets:
@@ -82,25 +103,27 @@ class LibriVADDataset(BaseVADDataset[AudioSample]):
                 if not label_split_dir.exists() or not label_split_dir.is_dir():
                     continue
 
-                for audio_path in iter_audio_files(
+                audio_files = iter_audio_files(
                     audio_split_dir,
                     extensions=self.extensions,
-                ):
-                    label_path = self._audio_to_label_path(
-                        audio_path=audio_path,
-                        dataset_name=dataset_name,
-                        split_name=split_name,
-                    )
+                )
 
-                    if label_path.exists():
-                        samples.append(
-                            AudioSample(
-                                audio_path=audio_path,
-                                label_path=label_path,
-                            )
+                pairs, missing = match_audio_label_pairs(
+                    audio_files,
+                    map_fn=lambda audio_path, dn=dataset_name, sn=split_name: (
+                        self._audio_to_label_path(
+                            audio_path=audio_path,
+                            dataset_name=dn,
+                            split_name=sn,
                         )
-                    else:
-                        missing_labels += 1
+                    ),
+                )
+                missing_labels += missing
+
+                samples.extend(
+                    AudioExample(audio_path=audio_path, label_path=label_path)
+                    for audio_path, label_path in pairs
+                )
 
         if missing_labels > 0:
             warnings.warn(
@@ -127,18 +150,25 @@ class LibriVADDataset(BaseVADDataset[AudioSample]):
         split_name: str,
     ) -> Path:
         """
-        Map an audio file path to its corresponding label file path.
+        Derive the expected label path for a LibriVAD audio file.
+
+        The label path is reconstructed from the LibriSpeech-style utterance ID
+        in the audio filename. For an audio stem such as ``61-70968-0019``, the
+        label is expected at:
+
+        ``labels_root / dataset_name / split_name / 61 / 70968 / 61-70968-0019.npy``
 
         Args:
-            audio_path (Path): Path to the audio file.
-            dataset_name (str): Dataset name.
-            split_name (str): Split name.
+            audio_path: Path to the audio file.
+            dataset_name: Dataset name used in the directory hierarchy.
+            split_name: Split name used in the directory hierarchy.
 
         Returns:
-            Path: Expected label file path.
+            Expected label file path.
 
         Raises:
-            ValueError: If the audio filename format is invalid.
+            ValueError: If the audio filename does not follow the expected
+                LibriSpeech-style ``speaker-chapter-utterance`` pattern.
         """
         stem = audio_path.stem
         stem_parts = stem.split("-")

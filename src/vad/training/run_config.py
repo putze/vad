@@ -7,6 +7,16 @@ from pathlib import Path
 
 @dataclass(slots=True)
 class ExperimentPaths:
+    """
+    Container for filesystem paths associated with a single experiment run.
+
+    Attributes:
+        experiment_name: High-level experiment identifier (e.g. "causal_vad").
+        run_name: Unique run identifier (e.g. timestamp or custom name).
+        log_dir: Directory used for logs (e.g. TensorBoard).
+        checkpoint_dir: Directory used for model checkpoints.
+    """
+
     experiment_name: str
     run_name: str
     log_dir: Path
@@ -20,6 +30,26 @@ class ExperimentPaths:
         checkpoint_root: str | Path = "checkpoints",
         run_name: str | None = None,
     ) -> "ExperimentPaths":
+        """
+        Create directories and return an ExperimentPaths instance.
+
+        Directory structure:
+            log_dir        = log_root / experiment_name / run_name
+            checkpoint_dir = checkpoint_root / experiment_name / run_name
+
+        If ``run_name`` is not provided, a timestamp is used to ensure
+        uniqueness.
+
+        Args:
+            experiment_name: Name of the experiment.
+            log_root: Root directory for logs.
+            checkpoint_root: Root directory for checkpoints.
+            run_name: Optional custom run name. If None, a timestamp
+                (YYYYMMDD_HHMMSS) is used.
+
+        Returns:
+            An initialized ExperimentPaths object with created directories.
+        """
         if run_name is None:
             run_name = datetime.now().strftime("%Y%m%d_%H%M%S")
 

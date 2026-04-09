@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 
 from vad.app.state import StreamingState
-from vad.data.utils import ensure_mono_waveform
+from vad.data.audio_utils import ensure_mono_waveform
 from vad.inference.offline import OfflineVADPrediction
 from vad.inference.streaming import StreamingPrediction
 

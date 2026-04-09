@@ -12,12 +12,12 @@ from vad.data import (
     build_processed_datasets,
 )
 from vad.data.preprocessing import (
-    AudioPreprocessor,
     LabelAligner,
     LogMelFeatureExtractor,
     VADPreprocessor,
+    WaveformPreprocessor,
 )
-from vad.models.causal_conv import CausalVAD
+from vad.models.causal_vad import CausalVAD
 from vad.training.loops import train_model
 
 
@@ -25,7 +25,7 @@ def build_preprocessor() -> VADPreprocessor:
     """
     Build the preprocessing pipeline used for VAD training.
     """
-    audio_preprocessor = AudioPreprocessor(
+    waveform_preprocessor = WaveformPreprocessor(
         target_sample_rate=16000,
     )
 
@@ -45,7 +45,7 @@ def build_preprocessor() -> VADPreprocessor:
     )
 
     return VADPreprocessor(
-        audio_preprocessor=audio_preprocessor,
+        waveform_preprocessor=waveform_preprocessor,
         feature_extractor=feature_extractor,
         label_aligner=label_aligner,
     )
