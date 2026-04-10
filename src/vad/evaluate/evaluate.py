@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from vad.data.preprocessing import LabelAligner
+from vad.data.preprocessing.labels import LabelAligner
 from vad.training.metrics import BinaryClassificationMetrics, VADMetricsTracker
 
 

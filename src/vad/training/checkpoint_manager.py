@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
+import dataclasses
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +21,8 @@ def _serialize_extra_state(extra_state: dict[str, Any] | None) -> dict[str, Any]
 
     serialized: dict[str, Any] = {}
     for key, value in extra_state.items():
-        if is_dataclass(value):
-            serialized[key] = asdict(value)
+        if dataclasses.is_dataclass(value):
+            serialized[key] = dataclasses.asdict(value)
         else:
             serialized[key] = value
     return serialized
@@ -143,7 +143,7 @@ class CheckpointManager:
             model: Model whose parameters should be saved.
             optimizer: Optimizer whose internal state should be saved.
             metrics: Dictionary of current epoch metrics. It must contain
-            the monitored metric specified by ``self.monitor``.
+                the monitored metric specified by ``self.monitor``.
             extra_state: Optional additional state to include in the checkpoint.
 
         Returns:

@@ -9,8 +9,8 @@ import torch
 
 from vad.cli.utils import resolve_device
 from vad.config import InferenceConfig
-from vad.inference import OfflineVADInferencer, predictions_to_segments
-from vad.inference.offline import OfflineVADPrediction
+from vad.inference.offline import OfflineVADInferencer, OfflineVADPrediction
+from vad.inference.utils import predictions_to_segments
 
 
 def parse_args() -> argparse.Namespace:

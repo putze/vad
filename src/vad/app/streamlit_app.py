@@ -9,7 +9,7 @@ from vad.app.components.offline import render_offline_tab
 from vad.app.components.online import render_online_tab
 from vad.app.sidebar import sidebar
 from vad.config import AudioConfig
-from vad.inference import OfflineVADInferencer
+from vad.inference.offline import OfflineVADInferencer
 from vad.inference.streaming import StreamingVADInferencer
 
 APP_TITLE = "Voice Activity Detection Demo"

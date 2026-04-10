@@ -9,12 +9,6 @@ from pathlib import Path
 class ExperimentPaths:
     """
     Container for filesystem paths associated with a single experiment run.
-
-    Attributes:
-        experiment_name: High-level experiment identifier (e.g. "causal_vad").
-        run_name: Unique run identifier (e.g. timestamp or custom name).
-        log_dir: Directory used for logs (e.g. TensorBoard).
-        checkpoint_dir: Directory used for model checkpoints.
     """
 
     experiment_name: str

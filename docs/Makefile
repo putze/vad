@@ -1,25 +1,25 @@
-# Minimal makefile for Sphinx documentation
-#
+# Minimal Makefile for Sphinx documentation
 
-SPHINXOPTS    ?=
-SPHINXBUILD   ?= sphinx-build
-SPHINXAPIDOC  ?= sphinx-apidoc
-SOURCEDIR     = .
-BUILDDIR      = _build
-APIDIR        = api
-MODULEDIR     = ../src/vad
+SPHINXOPTS ?=
+SPHINXBUILD ?= sphinx-build
+SOURCEDIR = .
+BUILDDIR = _build
+APIGENDIR = api/generated
+
+.PHONY: help clean html html-strict rebuild
 
 help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-apidoc:
-	@mkdir -p "$(APIDIR)"
-	@$(SPHINXAPIDOC) -o "$(APIDIR)" "$(MODULEDIR)" --separate --module-first --force
+clean:
+	rm -rf "$(BUILDDIR)" "$(APIGENDIR)"
 
-html: apidoc
-	@$(SPHINXBUILD) -b html "$(SOURCEDIR)" "$(BUILDDIR)"/html
+html:
+	@mkdir -p "$(APIGENDIR)"
+	@$(SPHINXBUILD) -E -b html "$(SOURCEDIR)" "$(BUILDDIR)/html" $(SPHINXOPTS) $(O)
 
-.PHONY: help apidoc html Makefile
+html-strict:
+	@mkdir -p "$(APIGENDIR)"
+	@$(SPHINXBUILD) -E -W -b html "$(SOURCEDIR)" "$(BUILDDIR)/html" $(SPHINXOPTS) $(O)
 
-%: Makefile
-	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+rebuild: clean html

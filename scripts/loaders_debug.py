@@ -8,7 +8,8 @@ from torch.utils.data import DataLoader
 
 import src.vad.data.preprocessing
 from src.vad.data.build import LibriVADConfig, build_processed_datasets, build_raw_datasets
-from src.vad.data.datasets import BaseVADDataset, ProcessedVADDataset
+from src.vad.data.datasets.base import BaseVADDataset
+from src.vad.data.datasets.processed import ProcessedVADDataset
 from src.vad.data.loaders import DataLoaderConfig, build_dataloaders
 
 
@@ -287,16 +288,18 @@ def build_dataset_configs(
     return train_config, val_config, test_config
 
 
-def build_processor(config: DebugConfig) -> src.vad.data.preprocessing.VADPreprocessor:
+def build_processor(
+    config: DebugConfig,
+) -> src.vad.data.preprocessing.preprocessing.VADPreprocessor:
     """
     Build the preprocessing pipeline used for debugging.
     """
-    waveform_preprocessor = src.vad.data.preprocessing.WaveformPreprocessor(
+    waveform_preprocessor = src.vad.data.preprocessing.waveform.WaveformPreprocessor(
         target_sample_rate=config.target_sample_rate,
         normalize=config.normalize,
     )
 
-    feature_extractor = src.vad.data.preprocessing.LogMelFeatureExtractor(
+    feature_extractor = src.vad.data.preprocessing.features.LogMelFeatureExtractor(
         sample_rate=config.target_sample_rate,
         frame_length=config.frame_length,
         hop_length=config.hop_length,
@@ -304,13 +307,13 @@ def build_processor(config: DebugConfig) -> src.vad.data.preprocessing.VADPrepro
         n_mels=config.n_mels,
     )
 
-    label_aligner = src.vad.data.preprocessing.LabelAligner(
+    label_aligner = src.vad.data.preprocessing.labels.LabelAligner(
         hop_length=feature_extractor.hop_length,
         frame_length=feature_extractor.frame_length,
         center=feature_extractor.center,
     )
 
-    return src.vad.data.preprocessing.VADPreprocessor(
+    return src.vad.data.preprocessing.preprocessing.VADPreprocessor(
         waveform_preprocessor=waveform_preprocessor,
         feature_extractor=feature_extractor,
         label_aligner=label_aligner,

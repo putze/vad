@@ -8,18 +8,12 @@ import torch
 
 from vad.cli.utils import resolve_device
 from vad.config import AudioConfig, TrainingConfig
-from vad.data import (
-    DataLoaderConfig,
-    DatasetConfig,
-    build_dataloaders,
-    build_processed_datasets,
-)
-from vad.data.preprocessing import (
-    LabelAligner,
-    LogMelFeatureExtractor,
-    VADPreprocessor,
-    WaveformPreprocessor,
-)
+from vad.data.build import DatasetConfig, build_processed_datasets
+from vad.data.loaders import DataLoaderConfig, build_dataloaders
+from vad.data.preprocessing.features import LogMelFeatureExtractor
+from vad.data.preprocessing.labels import LabelAligner
+from vad.data.preprocessing.preprocessing import VADPreprocessor
+from vad.data.preprocessing.waveform import WaveformPreprocessor
 from vad.models.causal_vad import CausalVAD
 from vad.training.loops import train_model
 

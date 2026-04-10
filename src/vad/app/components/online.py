@@ -12,8 +12,7 @@ from vad.app.plots import (
 )
 from vad.app.state import StreamingState
 from vad.config import AudioConfig
-from vad.inference import StreamingVADInferencer
-from vad.inference.streaming import StreamingPrediction
+from vad.inference.streaming import StreamingPrediction, StreamingVADInferencer
 
 
 def init_streaming_state() -> StreamingState:

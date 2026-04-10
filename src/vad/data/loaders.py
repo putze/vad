@@ -7,21 +7,13 @@ from torch.utils.data import DataLoader, Dataset
 
 from vad.data.collate import pad_collate_fn
 from vad.data.datasets.processed import ProcessedVADDataset
-from vad.data.preprocessing import VADPreprocessor
+from vad.data.preprocessing.preprocessing import VADPreprocessor
 
 
 @dataclass(slots=True)
 class DataLoaderConfig:
     """
     Configuration for PyTorch DataLoader creation.
-
-    Attributes:
-        batch_size: Number of samples per batch.
-        num_workers: Number of worker processes used for data loading.
-        pin_memory: Whether to pin host memory for faster device transfer.
-        train_shuffle: Whether to shuffle the training dataset.
-        drop_last_train: Whether to drop the last incomplete training batch.
-        persistent_workers: Whether worker processes stay alive across epochs.
     """
 
     batch_size: int = 16

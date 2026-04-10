@@ -7,7 +7,7 @@ from plotly.subplots import make_subplots
 
 from vad.app.state import StreamingState
 from vad.data.audio_utils import ensure_mono_waveform
-from vad.inference import OfflineVADPrediction
+from vad.inference.offline import OfflineVADPrediction
 
 
 def plot_waveform(waveform: torch.Tensor, sample_rate: int) -> go.Figure:
@@ -61,6 +61,7 @@ def plot_probabilities(prediction: OfflineVADPrediction) -> go.Figure:
 
 def plot_predictions(prediction: OfflineVADPrediction) -> go.Figure:
     """Plot binary VAD predictions."""
+
     times = prediction.frame_times.detach().cpu().numpy()
     preds = prediction.predictions.detach().cpu().numpy().astype(np.int32)
 
@@ -131,6 +132,7 @@ def plot_overview(
 
 def plot_streaming_state(state: StreamingState) -> go.Figure:
     """Plot rolling online state."""
+
     fig = make_subplots(
         rows=3,
         cols=1,

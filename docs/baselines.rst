@@ -87,7 +87,7 @@ When comparing models, focus on:
 
 
 Limitations of the baseline
---------------------------
+---------------------------
 
 - Rule-based, not learned from data
 - Limited adaptability to new domains

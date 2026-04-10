@@ -9,7 +9,7 @@ from vad.cli.utils import resolve_device
 from vad.config import InferenceConfig
 from vad.data import DatasetConfig, build_raw_dataset
 from vad.evaluate.evaluate import evaluate_model
-from vad.inference import OfflineVADInferencer
+from vad.inference.offline import OfflineVADInferencer
 
 
 def parse_args() -> argparse.Namespace:

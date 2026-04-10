@@ -9,7 +9,8 @@ from torch import Tensor
 from vad.config import InferenceConfig
 from vad.data.audio_utils import ensure_mono_waveform
 from vad.data.file_utils import load_audio
-from vad.data.preprocessing import LogMelFeatureExtractor, WaveformPreprocessor
+from vad.data.preprocessing.features import LogMelFeatureExtractor
+from vad.data.preprocessing.waveform import WaveformPreprocessor
 from vad.inference.utils import (
     ensure_time_major_features,
     logits_to_predictions,
@@ -23,14 +24,6 @@ from vad.models.loading import load_model
 class OfflineVADPrediction:
     """
     Container for frame-level offline VAD outputs.
-
-    Attributes:
-        waveform: Original input waveform provided for inference.
-        sample_rate: Sample rate of ``waveform`` in Hz.
-        frame_times: Time stamp for each output frame in seconds.
-        probabilities: Frame-level speech probabilities.
-        predictions: Frame-level binary speech decisions.
-        duration_seconds: Total waveform duration in seconds.
     """
 
     waveform: Tensor

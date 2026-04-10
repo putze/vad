@@ -10,7 +10,8 @@ from vad.cli.utils import resolve_device
 from vad.config import InferenceConfig, StreamingConfig
 from vad.data.audio_utils import ensure_mono_waveform
 from vad.data.file_utils import load_audio
-from vad.data.preprocessing import LogMelFeatureExtractor, WaveformPreprocessor
+from vad.data.preprocessing.features import LogMelFeatureExtractor
+from vad.data.preprocessing.waveform import WaveformPreprocessor
 from vad.inference.streaming import StreamingVADInferencer
 from vad.inference.utils import ensure_time_major_features
 from vad.models.loading import load_model

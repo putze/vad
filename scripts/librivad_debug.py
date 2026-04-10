@@ -7,18 +7,16 @@ from torch import Tensor
 
 from src.vad.data.datasets.librivad import LibriVADDataset
 from src.vad.data.file_utils import load_audio
-from src.vad.data.preprocessing import (
-    LabelAligner,
-    LogMelFeatureExtractor,
-    VADPreprocessor,
-    WaveformPreprocessor,
-)
+from src.vad.data.preprocessing.labels import LabelAligner
 from src.vad.visualization import (
     debug_plot_alignment,
     debug_plot_features_with_label_overlay,
     debug_plot_features_with_labels,
     debug_plot_waveform_with_labels,
 )
+from vad.data.preprocessing.features import LogMelFeatureExtractor
+from vad.data.preprocessing.preprocessing import VADPreprocessor
+from vad.data.preprocessing.waveform import WaveformPreprocessor
 
 
 @dataclass

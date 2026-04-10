@@ -17,22 +17,6 @@ from torchmetrics.classification import (
 class BinaryClassificationMetrics:
     """
     Aggregated frame-level binary classification metrics.
-
-    Attributes:
-        loss: Mean loss over all valid frames.
-        accuracy: Fraction of correctly classified frames.
-        precision: Positive predictive value, defined as TP / (TP + FP).
-        recall: True positive rate, defined as TP / (TP + FN).
-        f1: Harmonic mean of precision and recall.
-        false_positive_rate: Fraction of non-speech frames predicted as speech,
-            defined as FP / (FP + TN).
-        false_negative_rate: Fraction of speech frames predicted as non-speech,
-            defined as FN / (FN + TP).
-        tp: Number of true positive frames.
-        fp: Number of false positive frames.
-        tn: Number of true negative frames.
-        fn: Number of false negative frames.
-        num_frames: Number of valid frames included in the computation.
     """
 
     loss: float

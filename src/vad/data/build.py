@@ -4,21 +4,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
-from vad.data.datasets import BaseVADDataset, LibriVADDataset, ProcessedVADDataset
-from vad.data.preprocessing import VADPreprocessor
+from vad.data.datasets.base import BaseVADDataset
+from vad.data.datasets.librivad import LibriVADDataset
+from vad.data.datasets.processed import ProcessedVADDataset
+from vad.data.preprocessing.preprocessing import VADPreprocessor
 
 
 @dataclass(slots=True)
 class LibriVADConfig:
     """
     Configuration for building a LibriVAD dataset.
-
-    Attributes:
-        results_root: Root directory containing audio files.
-        labels_root: Root directory containing sample-level label files.
-        datasets: Optional subset of LibriVAD source datasets to include.
-        splits: Optional subset of splits to include.
-        extensions: Allowed audio file extensions.
     """
 
     results_root: str | Path

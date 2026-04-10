@@ -18,14 +18,6 @@ from vad.inference.utils import (
 class StreamingPrediction:
     """
     Container for frame-level predictions emitted for one streaming update.
-
-    Attributes:
-        probabilities: Speech probabilities for newly emitted frames.
-        predictions: Binary speech decisions for newly emitted frames.
-        start_frame: Global index of the first emitted frame.
-        end_frame: Global index one past the last emitted frame.
-        start_time_sec: Start time of the emitted frame range in seconds.
-        end_time_sec: End time of the emitted frame range in seconds.
     """
 
     probabilities: Tensor

@@ -12,8 +12,7 @@ from vad.app.plots import (
     plot_waveform,
 )
 from vad.config import AudioConfig
-from vad.inference import OfflineVADInferencer
-from vad.inference.offline import OfflineVADPrediction
+from vad.inference.offline import OfflineVADInferencer, OfflineVADPrediction
 
 
 def run_offline_inference(

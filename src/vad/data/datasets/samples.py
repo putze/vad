@@ -11,10 +11,6 @@ class AudioExample:
     used to load:
     - the waveform
     - the corresponding label sequence
-
-    Attributes:
-        audio_path: Path to the audio file.
-        label_path: Path to the label file associated with the audio.
     """
 
     audio_path: Path
