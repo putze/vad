@@ -5,33 +5,72 @@ import streamlit as st
 from vad.config import InferenceConfig, StreamingConfig
 
 
-def sidebar() -> tuple[str, str, float, float, float]:
+def sidebar() -> tuple[str, str, InferenceConfig, StreamingConfig]:
     """Render sidebar controls."""
-    st.sidebar.header("Controls")
+    st.sidebar.header("⚙️ VAD Controls")
+
     inference_config = InferenceConfig()
     streaming_config = StreamingConfig()
 
-    mode = st.sidebar.radio("Mode", ["Offline", "Online"])
-    checkpoint_path = st.sidebar.text_input("Checkpoint", "checkpoints/best_causal_vad.pt")
-    threshold = st.sidebar.slider(
-        "Speech threshold",
+    # --- Mode ---
+    mode = st.sidebar.radio(
+        "Inference mode",
+        ["Offline", "Streaming"],
+        help="Offline processes a full file at once. Streaming simulates real-time audio.",
+    )
+
+    st.sidebar.divider()
+
+    # --- Model ---
+    st.sidebar.subheader("Model")
+    checkpoint_path = st.sidebar.text_input(
+        "Checkpoint path",
+        "checkpoints/causal_vad.pt",
+        help="Path to the trained VAD model checkpoint.",
+    )
+
+    inference_config.threshold = st.sidebar.slider(
+        "Speech detection threshold",
         min_value=0.05,
         max_value=0.95,
-        value=inference_config.threshold,
+        value=float(inference_config.threshold),
         step=0.05,
+        help=(
+            "Probability threshold for speech detection.\n"
+            "Lower = more sensitive (more false positives).\n"
+            "Higher = stricter (more false negatives)."
+        ),
     )
-    chunk_seconds = st.sidebar.slider(
-        "Chunk duration (online)",
-        min_value=0.25,
-        max_value=2.0,
-        value=streaming_config.chunk_seconds,
-        step=0.25,
-    )
-    window_seconds = st.sidebar.slider(
-        "Rolling window (online)",
-        min_value=3.0,
-        max_value=30.0,
-        value=streaming_config.rolling_window_seconds,
-        step=1.0,
-    )
-    return mode, checkpoint_path, threshold, chunk_seconds, window_seconds
+
+    # --- Streaming settings ---
+    if mode == "Streaming":
+        st.sidebar.divider()
+        st.sidebar.subheader("Streaming settings")
+
+        streaming_config.chunk_seconds = st.sidebar.slider(
+            "Chunk size (s)",
+            min_value=0.1,
+            max_value=2.0,
+            value=float(streaming_config.chunk_seconds),
+            step=0.1,
+            help=(
+                "Size of incoming audio chunks.\n"
+                "Smaller = faster updates, higher overhead.\n"
+                "Larger = smoother but slower updates."
+            ),
+        )
+
+        streaming_config.min_buffer_seconds = st.sidebar.slider(
+            "Minimum buffer (s)",
+            min_value=1.0,
+            max_value=10.0,
+            value=float(streaming_config.min_buffer_seconds),
+            step=0.5,
+            help=(
+                "Minimum audio required before inference runs.\n"
+                "Lower = lower latency.\n"
+                "Higher = more stable predictions."
+            ),
+        )
+
+    return mode, checkpoint_path, inference_config, streaming_config

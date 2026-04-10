@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import base64
+import json
+
 import numpy as np
 import plotly.graph_objects as go
+import streamlit.components.v1 as components
 import torch
 from plotly.subplots import make_subplots
 
@@ -170,3 +174,214 @@ def plot_streaming_state(state: StreamingState) -> go.Figure:
     fig.update_xaxes(title_text="Time (s)", row=3, col=1)
     fig.update_layout(height=720, showlegend=False, margin=dict(l=20, r=20, t=60, b=20))
     return fig
+
+
+def render_synced_audio_plot(
+    audio_bytes: bytes,
+    waveform: torch.Tensor,
+    sample_rate: int,
+    prediction: OfflineVADPrediction,
+    height: int = 860,
+) -> None:
+    """Render a Plotly-based audio player synced with a 3-row VAD overview plot."""
+    mono = ensure_mono_waveform(waveform).detach().cpu()
+    waveform_values = mono.numpy().tolist()
+    waveform_times = (torch.arange(mono.numel(), dtype=torch.float32) / sample_rate).tolist()
+
+    frame_times = prediction.frame_times.detach().cpu().tolist()
+    probabilities = prediction.probabilities.detach().cpu().tolist()
+    predictions = prediction.predictions.detach().cpu().to(torch.int32).tolist()
+
+    audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+
+    payload = {
+        "waveform_times": waveform_times,
+        "waveform_values": waveform_values,
+        "frame_times": frame_times,
+        "probabilities": probabilities,
+        "predictions": predictions,
+    }
+
+    html = f"""
+    <html>
+    <head>
+      <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+      <style>
+        body {{
+          margin: 0;
+          background: transparent;
+          color: white;
+          font-family: sans-serif;
+        }}
+        #player {{
+          width: 100%;
+          margin-top: 8px;
+        }}
+      </style>
+    </head>
+    <body>
+      <div id="plot" style="width:100%; height:{height - 70}px;"></div>
+      <audio id="player" controls>
+        <source src="data:audio/wav;base64,{audio_b64}" type="audio/wav">
+      </audio>
+
+      <script>
+        const data = {json.dumps(payload)};
+        const plotDiv = document.getElementById("plot");
+        const player = document.getElementById("player");
+
+        const traces = [
+          {{
+            x: data.waveform_times,
+            y: data.waveform_values,
+            mode: "lines",
+            name: "Waveform",
+            xaxis: "x",
+            yaxis: "y",
+          }},
+          {{
+            x: data.frame_times,
+            y: data.probabilities,
+            mode: "lines",
+            name: "Probability",
+            xaxis: "x2",
+            yaxis: "y2",
+          }},
+          {{
+            x: data.frame_times,
+            y: data.predictions,
+            mode: "lines",
+            line: {{ shape: "hv" }},
+            name: "Prediction",
+            xaxis: "x3",
+            yaxis: "y3",
+          }}
+        ];
+
+        const layout = {{
+          height: {height - 70},
+          showlegend: false,
+          margin: {{ l: 20, r: 20, t: 60, b: 20 }},
+          paper_bgcolor: "#0e1117",
+          plot_bgcolor: "#0e1117",
+          font: {{ color: "#fafafa" }},
+
+          annotations: [
+            {{
+              text: "Waveform",
+              x: 0.5, y: 1.0,
+              xref: "paper", yref: "paper",
+              yshift: 20,
+              showarrow: false,
+              font: {{ size: 16 }}
+            }},
+            {{
+              text: "Speech probability",
+              x: 0.5, y: 0.52,
+              xref: "paper", yref: "paper",
+              yshift: 20,
+              showarrow: false,
+              font: {{ size: 16 }}
+            }},
+            {{
+              text: "Binary prediction",
+              x: 0.5, y: 0.185,
+              xref: "paper", yref: "paper",
+              yshift: 20,
+              showarrow: false,
+              font: {{ size: 16 }}
+            }}
+          ],
+
+          xaxis: {{
+            domain: [0, 1],
+            anchor: "y",
+            matches: "x3",
+            showticklabels: false,
+            gridcolor: "#283042",
+            zerolinecolor: "#283042",
+          }},
+          yaxis: {{
+            domain: [0.59, 1.0],
+            title: "Amp.",
+            gridcolor: "#283042",
+            zerolinecolor: "#283042",
+          }},
+
+          xaxis2: {{
+            domain: [0, 1],
+            anchor: "y2",
+            matches: "x3",
+            showticklabels: false,
+            gridcolor: "#283042",
+            zerolinecolor: "#283042",
+          }},
+          yaxis2: {{
+            domain: [0.22, 0.54],
+            title: "Prob.",
+            range: [0.0, 1.0],
+            gridcolor: "#283042",
+            zerolinecolor: "#283042",
+          }},
+
+          xaxis3: {{
+            domain: [0, 1],
+            anchor: "y3",
+            title: "Time (s)",
+            gridcolor: "#283042",
+            zerolinecolor: "#283042",
+          }},
+          yaxis3: {{
+            domain: [0.0, 0.17],
+            title: "Pred.",
+            range: [-0.1, 1.1],
+            tickvals: [0, 1],
+            gridcolor: "#283042",
+            zerolinecolor: "#283042",
+          }},
+
+          shapes: [
+            {{
+              type: "line",
+              x0: 0,
+              x1: 0,
+              y0: 0,
+              y1: 1,
+              xref: "x3",
+              yref: "paper",
+              line: {{
+                color: "#FFFFFF",
+                width: 2
+              }}
+            }}
+          ]
+        }};
+
+        Plotly.newPlot(plotDiv, traces, layout, {{
+          responsive: true,
+          displayModeBar: true
+        }});
+
+        function updateCursor(timeSec) {{
+          Plotly.relayout(plotDiv, {{
+            "shapes[0].x0": timeSec,
+            "shapes[0].x1": timeSec
+          }});
+        }}
+
+        player.addEventListener("timeupdate", () => {{
+          updateCursor(player.currentTime);
+        }});
+
+        plotDiv.on("plotly_click", (event) => {{
+          if (!event.points || event.points.length === 0) return;
+          const t = event.points[0].x;
+          player.currentTime = t;
+          updateCursor(t);
+        }});
+      </script>
+    </body>
+    </html>
+    """
+
+    components.html(html, height=height)

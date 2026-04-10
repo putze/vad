@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 from torch import Tensor, nn
 
 from vad.config import AudioConfig, InferenceConfig, StreamingConfig
+from vad.data.preprocessing.features import LogMelFeatureExtractor
+from vad.data.preprocessing.waveform import WaveformPreprocessor
+from vad.inference.adapters import StreamingFeatureExtractorAdapter
 from vad.inference.utils import (
     FeatureExtractorProtocol,
     logits_to_predictions,
     normalize_binary_logits,
     prepare_conv1d_input,
 )
+from vad.models.loading import load_model
 
 
 @dataclass(slots=True)
@@ -100,6 +105,42 @@ class StreamingVADInferencer:
 
         self.model.to(self.device)
         self.reset()
+
+    @classmethod
+    def from_checkpoint(
+        cls,
+        checkpoint_path: str | Path,
+        *,
+        inference_config: InferenceConfig | None = None,
+        streaming_config: StreamingConfig | None = None,
+        device: torch.device | None = None,
+    ) -> "StreamingVADInferencer":
+        device = device or torch.device("cpu")
+        model, audio_config, _ = load_model(checkpoint_path, device)
+
+        feature_extractor = StreamingFeatureExtractorAdapter(
+            waveform_preprocessor=WaveformPreprocessor(
+                target_sample_rate=audio_config.sample_rate,
+            ),
+            feature_extractor=LogMelFeatureExtractor(
+                sample_rate=audio_config.sample_rate,
+                frame_length=audio_config.frame_length_samples,
+                hop_length=audio_config.hop_length_samples,
+                n_fft=audio_config.frame_length_samples,
+                n_mels=audio_config.n_mels,
+                center=False,
+            ),
+            n_mels=audio_config.n_mels,
+        )
+
+        return cls(
+            model=model,
+            feature_extractor=feature_extractor,
+            audio_config=audio_config,
+            inference_config=inference_config,
+            streaming_config=streaming_config,
+            device=device,
+        )
 
     @property
     def sample_rate(self) -> int:

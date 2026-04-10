@@ -22,7 +22,11 @@ class AudioConfig:
 @dataclass(slots=True)
 class StreamingConfig:
     chunk_seconds: float = 0.5
-    min_buffer_seconds: float = 0.025
+    min_buffer_seconds: float = 1.0
+
+    def __post_init__(self) -> None:
+        if self.min_buffer_seconds < self.chunk_seconds:
+            raise ValueError("min_buffer_seconds must be >= chunk_seconds")
 
 
 @dataclass(slots=True)
