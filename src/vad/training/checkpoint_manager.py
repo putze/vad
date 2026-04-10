@@ -34,8 +34,7 @@ class CheckpointManager:
 
     This class can save:
     - the most recent checkpoint (``last.pt`` by default)
-    - the best checkpoint according to a monitored validation metric
-      (``best.pt`` by default)
+    - the best checkpoint according to a monitored validation metric (``best.pt`` by default)
 
     The saved checkpoint includes model state, optimizer state, metrics,
     and optional extra training state.
@@ -56,13 +55,11 @@ class CheckpointManager:
 
         Args:
             checkpoint_dir: Directory where checkpoint files will be saved.
-            monitor: Name of the metric used to determine whether a checkpoint
-                is the new best one.
+            monitor: Name of the metric used to determine whether a checkpoint is the new best one.
             mode: Optimization direction for the monitored metric:
                 - ``"min"`` means lower is better
                 - ``"max"`` means higher is better
-            min_delta: Minimum improvement required to replace the current
-                best checkpoint.
+            min_delta: Minimum improvement required to replace the current best checkpoint.
             save_last: Whether to always save the latest checkpoint.
             best_filename: Filename for the best checkpoint.
             last_filename: Filename for the latest checkpoint.
@@ -146,7 +143,7 @@ class CheckpointManager:
             model: Model whose parameters should be saved.
             optimizer: Optimizer whose internal state should be saved.
             metrics: Dictionary of current epoch metrics. It must contain
-                the monitored metric specified by ``self.monitor``.
+            the monitored metric specified by ``self.monitor``.
             extra_state: Optional additional state to include in the checkpoint.
 
         Returns:

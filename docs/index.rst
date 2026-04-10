@@ -1,16 +1,71 @@
-.. VAD documentation master file, created by
-   sphinx-quickstart on Mon Apr  6 10:03:11 2026.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
-VAD documentation
+VAD Documentation
 =================
 
-VAD documentation
-=================
+.. note::
+
+   This project is a minimal end-to-end implementation of a Voice Activity Detection system,
+   focusing on clarity, reproducibility, and streaming compatibility rather than state-of-the-art performance.
+
+
+Overview
+--------
+
+This project implements a **Voice Activity Detection (VAD)** system with:
+
+- Frame-level speech / non-speech prediction
+- Streaming-compatible inference
+- Training and evaluation pipeline
+- Baseline comparison (WebRTC VAD)
+- Interactive visualization demo
+
+The system is designed to be simple, efficient, and easy to understand.
+
+
+Getting Started
+---------------
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
 
-   modules
+   installation
+   quickstart
+
+
+Core Components
+---------------
+
+.. toctree::
+   :maxdepth: 1
+
+   design
+   data
+   model
+   training
+
+
+Evaluation and Baselines
+------------------------
+
+.. toctree::
+   :maxdepth: 1
+
+   evaluation
+   baselines
+
+
+Demo
+----
+
+.. toctree::
+   :maxdepth: 1
+
+   demo
+
+
+API Reference
+-------------
+
+.. toctree::
+   :maxdepth: 1
+
+   api/index

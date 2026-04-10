@@ -1,11 +1,3 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-# -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
-
 import sys
 from pathlib import Path
 
@@ -19,14 +11,12 @@ project = "VAD"
 copyright = "2026, Antje Farnier"
 author = "Antje Farnier"
 
-# -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
-
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
+    "sphinx.ext.intersphinx",
 ]
 
 templates_path = ["_templates"]
@@ -36,16 +26,33 @@ autodoc_default_options = {
     "members": True,
     "undoc-members": False,
     "show-inheritance": True,
+    "imported-members": False,
 }
+
 autosummary_generate = True
+autosummary_imported_members = False
 
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
+napoleon_preprocess_types = False
 
 add_module_names = True
+python_use_unqualified_type_names = False
 
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "torch": ("https://pytorch.org/docs/stable", None),
+}
 
+autodoc_mock_imports = [
+    "torchmetrics",
+]
+
+suppress_warnings = [
+    "ref.ref",
+    "image.not_readable",
+]
+
+myst_enable_extensions = ["colon_fence"]
 html_theme = "furo"
-html_static_path = []
+html_title = "VAD"

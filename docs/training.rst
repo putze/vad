@@ -1,41 +1,53 @@
-training package
-================
+Training
+========
 
-Submodules
-----------
+Objective
+---------
 
-training.callbacks module
+The model is trained as a binary classifier.
+
+- Loss: Binary Cross-Entropy
+- Output: speech probability per frame
+
+
+Optimization
+------------
+
+- Optimizer: Adam
+- Mini-batch training
+
+
+Handling Variable Length
 -------------------------
 
-.. automodule:: vad.training.callbacks
-   :members:
-   :show-inheritance:
+Audio sequences have different lengths.
 
-training.formatting module
+- Sequences are padded within a batch
+- A collate function ensures proper batching
+
+
+Evaluation During Training
 --------------------------
 
-.. automodule:: vad.training.formatting
-   :members:
-   :show-inheritance:
+Metrics:
 
-training.logger module
-----------------------
+- Precision
+- Recall
+- F1-score
 
-.. automodule:: vad.training.logger
-   :members:
-   :show-inheritance:
+Computed at the frame level.
 
-training.loops module
+
+Limitations
+-----------
+
+- No class imbalance handling
+- No advanced scheduling or regularization
+
+
+Possible Improvements
 ---------------------
 
-.. automodule:: vad.training.loops
-   :members:
-   :show-inheritance:
-
-training.metrics module
------------------------
-
-.. automodule:: vad.training.metrics
-   :members:
-   :show-inheritance:
-   :exclude-members: accuracy, f1, false_negative_rate, false_positive_rate, fn, fp, loss, num_frames, precision, recall, tn, tp
+- Weighted loss for imbalance
+- Learning rate scheduling
+- Data augmentation
