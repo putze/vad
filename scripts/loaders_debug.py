@@ -58,6 +58,53 @@ def describe_tensor(name: str, x: Tensor) -> None:
     print()
 
 
+def describe_batch_structure(batch: Any) -> None:
+    """
+    Print the raw structure of a batch returned by the DataLoader.
+    """
+    print("Raw batch structure:")
+    print(f"  type        : {type(batch).__name__}")
+
+    if isinstance(batch, (tuple, list)):
+        print(f"  num elements: {len(batch)}")
+        for i, item in enumerate(batch):
+            if isinstance(item, Tensor):
+                print(
+                    f"  [{i}] Tensor shape={tuple(item.shape)} "
+                    f"dtype={item.dtype} device={item.device}"
+                )
+            else:
+                print(f"  [{i}] {type(item).__name__}")
+    else:
+        print("  Batch is not a tuple/list.")
+    print()
+
+
+def unpack_batch(batch: Any) -> tuple[Tensor, Tensor, Tensor]:
+    """
+    Extract ``x``, ``y``, and ``lengths`` from a batch.
+
+    Accepts batches with additional trailing fields, for example
+    ``(x, y, lengths, metadata)``.
+    """
+    if not isinstance(batch, (tuple, list)):
+        raise TypeError(f"Expected batch to be a tuple/list, got {type(batch).__name__}")
+
+    if len(batch) < 3:
+        raise ValueError(f"Expected at least 3 batch elements (x, y, lengths), got {len(batch)}")
+
+    x, y, lengths = batch[:3]
+
+    if not isinstance(x, Tensor):
+        raise TypeError(f"Expected x to be a Tensor, got {type(x).__name__}")
+    if not isinstance(y, Tensor):
+        raise TypeError(f"Expected y to be a Tensor, got {type(y).__name__}")
+    if not isinstance(lengths, Tensor):
+        raise TypeError(f"Expected lengths to be a Tensor, got {type(lengths).__name__}")
+
+    return x, y, lengths
+
+
 def inspect_raw_dataset(dataset_name: str, dataset: BaseVADDataset) -> None:
     """
     Inspect one sample from a raw dataset.
@@ -125,7 +172,9 @@ def inspect_batch(loader_name: str, loader: DataLoader) -> None:
     print(f"DATALOADER INSPECTION: {loader_name}")
     print("=" * 80)
 
-    x, y, lengths = next(iter(loader))
+    batch = next(iter(loader))
+    describe_batch_structure(batch)
+    x, y, lengths = unpack_batch(batch)
 
     print("Single batch:")
     describe_tensor("x", x)
@@ -192,7 +241,9 @@ def inspect_multiple_batches(
     print(f"MULTI-BATCH CHECK: {loader_name}")
     print("=" * 80)
 
-    for batch_idx, (x, y, lengths) in enumerate(loader):
+    for batch_idx, batch in enumerate(loader):
+        x, y, lengths = unpack_batch(batch)
+
         print(
             f"batch {batch_idx:02d} | "
             f"x={tuple(x.shape)} | "
