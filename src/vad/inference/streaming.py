@@ -111,14 +111,32 @@ class StreamingVADInferencer:
 
     @property
     def sample_rate(self) -> int:
+        """
+        Return sampling rate of the audio signal.
+
+        Returns:
+            Sampling rate in Hz.
+        """
         return self.audio_config.sample_rate
 
     @property
     def hop_length(self) -> int:
+        """
+        Return the hop length between consecutive frames in samples.
+
+        Returns:
+            Number of samples between two consecutive frames.
+        """
         return self.audio_config.hop_length_samples
 
     @property
     def threshold(self) -> float:
+        """
+        Return the ecision threshold applied to model outputs.
+
+        Returns:
+            Threshold value in the range [0, 1].
+        """
         return self.inference_config.threshold
 
     @property
