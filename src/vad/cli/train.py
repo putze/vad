@@ -6,6 +6,7 @@ from typing import cast
 
 import torch
 
+from vad.cli.utils import resolve_device
 from vad.config import AudioConfig, TrainingConfig
 from vad.data import (
     DataLoaderConfig,
@@ -47,16 +48,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--experiment-name", type=str, default="causal_conv")
 
     return parser.parse_args()
-
-
-def resolve_device(device_arg: str | None) -> torch.device:
-    if device_arg is not None:
-        return torch.device(device_arg)
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
 
 
 def build_preprocessor(audio_config: AudioConfig) -> VADPreprocessor:

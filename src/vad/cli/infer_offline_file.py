@@ -7,6 +7,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import torch
 
+from vad.cli.utils import resolve_device
 from vad.config import InferenceConfig
 from vad.inference import OfflineVADInferencer, predictions_to_segments
 from vad.inference.offline import OfflineVADPrediction
@@ -56,17 +57,6 @@ def parse_args() -> argparse.Namespace:
         help="Torch device, e.g. 'cpu', 'cuda', or 'mps'. Defaults to auto-detect.",
     )
     return parser.parse_args()
-
-
-def resolve_device(device_arg: str | None) -> torch.device:
-    """Resolve torch device from CLI or auto-detect."""
-    if device_arg is not None:
-        return torch.device(device_arg)
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
 
 
 def save_csv(

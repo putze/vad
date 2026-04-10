@@ -6,6 +6,7 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
+from vad.cli.utils import resolve_device
 from vad.config import InferenceConfig, StreamingConfig
 from vad.data.audio_utils import ensure_mono_waveform
 from vad.data.file_utils import load_audio
@@ -95,17 +96,6 @@ def parse_args() -> argparse.Namespace:
         help="Torch device, e.g. 'cpu', 'cuda', or 'mps'. Defaults to auto-detect.",
     )
     return parser.parse_args()
-
-
-def resolve_device(device_arg: str | None) -> torch.device:
-    """Resolve torch device from CLI or auto-detect."""
-    if device_arg is not None:
-        return torch.device(device_arg)
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
 
 
 def main() -> None:
