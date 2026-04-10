@@ -43,7 +43,7 @@ def load_model(
         raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
 
     device = torch.device(device)
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
 
     if isinstance(checkpoint, dict):
         extra_state = checkpoint.get("extra_state", {})
