@@ -211,3 +211,5 @@ __marimo__/
 .DS_Store
 runs/
 outputs/
+checkpoints/**/*.pt
+!checkpoints/causal_vd.pt
