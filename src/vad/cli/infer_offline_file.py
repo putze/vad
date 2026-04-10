@@ -7,9 +7,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import torch
 
+from vad.config import InferenceConfig
 from vad.inference import OfflineVADInferencer, predictions_to_segments
 from vad.inference.offline import OfflineVADPrediction
-from vad.visualization.inference import plot_offline_vad_prediction
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,7 +49,24 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Display the plot interactively.",
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        help="Torch device, e.g. 'cpu', 'cuda', or 'mps'. Defaults to auto-detect.",
+    )
     return parser.parse_args()
+
+
+def resolve_device(device_arg: str | None) -> torch.device:
+    """Resolve torch device from CLI or auto-detect."""
+    if device_arg is not None:
+        return torch.device(device_arg)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
 def save_csv(
@@ -101,6 +118,8 @@ def save_prediction_plot(
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    from vad.visualization.inference import plot_offline_vad_prediction
+
     frame_hop_s = (
         float(prediction.frame_times[1] - prediction.frame_times[0])
         if len(prediction.frame_times) > 1
@@ -115,21 +134,25 @@ def save_prediction_plot(
         frame_hop_s=frame_hop_s,
         threshold=threshold,
         title=f"Offline VAD - {audio_name}",
-        show=show,
+        show=False,
     )
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
+
+    if show:
+        plt.show()
+
     plt.close(fig)
 
 
 def main() -> None:
     """Run offline VAD inference from the command line."""
     args = parse_args()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = resolve_device(args.device)
 
     inferencer = OfflineVADInferencer(
         checkpoint_path=args.checkpoint,
         device=device,
-        threshold=args.threshold,
+        inference_config=InferenceConfig(threshold=args.threshold),
     )
     prediction = inferencer.predict_file(args.audio)
 
@@ -153,7 +176,7 @@ def main() -> None:
         output_path=plot_path,
         prediction=prediction,
         sample_rate=prediction.sample_rate,
-        threshold=args.threshold,
+        threshold=inferencer.threshold,
         audio_name=args.audio.name,
         show=args.show_plot,
     )
@@ -162,6 +185,8 @@ def main() -> None:
 
     print(f"audio          : {args.audio}")
     print(f"checkpoint     : {args.checkpoint}")
+    print(f"sample_rate    : {inferencer.audio_config.sample_rate}")
+    print(f"frame_shift_ms : {inferencer.frame_shift_ms}")
     print(f"duration       : {prediction.duration_seconds:.2f}s")
     print(f"num_frames     : {len(prediction.predictions)}")
     print(f"speech_ratio   : {speech_ratio:.3f}")

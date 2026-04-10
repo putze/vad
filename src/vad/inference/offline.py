@@ -6,6 +6,7 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
+from vad.config import InferenceConfig
 from vad.data.audio_utils import ensure_mono_waveform
 from vad.data.file_utils import load_audio
 from vad.data.preprocessing import LogMelFeatureExtractor, WaveformPreprocessor
@@ -52,11 +53,7 @@ class OfflineVADInferencer:
         self,
         checkpoint_path: str | Path,
         device: torch.device,
-        threshold: float = 0.5,
-        target_sample_rate: int = 16000,
-        n_mels: int = 40,
-        frame_length_ms: float = 25.0,
-        frame_shift_ms: float = 10.0,
+        inference_config: InferenceConfig | None = None,
     ) -> None:
         """
         Initialize the offline inference pipeline.
@@ -64,49 +61,41 @@ class OfflineVADInferencer:
         Args:
             checkpoint_path: Path to the trained model checkpoint.
             device: Torch device used for inference.
-            threshold: Probability threshold for speech detection.
-            target_sample_rate: Target sample rate used by the preprocessing pipeline.
-            n_mels: Number of mel-frequency bins.
-            frame_length_ms: Analysis window length in milliseconds.
-            frame_shift_ms: Frame hop in milliseconds.
+            inference_config: Optional inference-time configuration.
 
         Raises:
-            ValueError: If any numeric parameter is invalid.
+            ValueError: If the threshold is invalid.
         """
-        if not 0.0 <= threshold <= 1.0:
-            raise ValueError(f"threshold must be in [0, 1], got {threshold}")
-        if target_sample_rate <= 0:
-            raise ValueError(f"target_sample_rate must be positive, got {target_sample_rate}")
-        if n_mels <= 0:
-            raise ValueError(f"n_mels must be positive, got {n_mels}")
-        if frame_length_ms <= 0:
-            raise ValueError(f"frame_length_ms must be positive, got {frame_length_ms}")
-        if frame_shift_ms <= 0:
-            raise ValueError(f"frame_shift_ms must be positive, got {frame_shift_ms}")
-
         self.device = device
-        self.threshold = threshold
-        self.target_sample_rate = target_sample_rate
-        self.n_mels = n_mels
-        self.frame_length_ms = frame_length_ms
-        self.frame_shift_ms = frame_shift_ms
+        self.inference_config = inference_config or InferenceConfig()
+
+        if not 0.0 <= self.inference_config.threshold <= 1.0:
+            raise ValueError(f"threshold must be in [0, 1], got {self.inference_config.threshold}")
+
+        self.model, self.audio_config, _ = load_model(checkpoint_path, self.device)
 
         self.waveform_preprocessor = WaveformPreprocessor(
-            target_sample_rate=target_sample_rate,
+            target_sample_rate=self.audio_config.sample_rate,
         )
-
-        frame_length = round(target_sample_rate * frame_length_ms / 1000.0)
-        hop_length = round(target_sample_rate * frame_shift_ms / 1000.0)
 
         self.feature_extractor = LogMelFeatureExtractor(
-            sample_rate=target_sample_rate,
-            frame_length=frame_length,
-            hop_length=hop_length,
-            n_fft=frame_length,
-            n_mels=n_mels,
+            sample_rate=self.audio_config.sample_rate,
+            frame_length=self.audio_config.frame_length_samples,
+            hop_length=self.audio_config.hop_length_samples,
+            n_fft=self.audio_config.frame_length_samples,
+            n_mels=self.audio_config.n_mels,
+            center=False,
         )
 
-        self.model = load_model(checkpoint_path, self.device, self.n_mels)
+    @property
+    def threshold(self) -> float:
+        """Return the speech detection threshold."""
+        return self.inference_config.threshold
+
+    @property
+    def frame_shift_ms(self) -> float:
+        """Return the frame shift in milliseconds."""
+        return self.audio_config.frame_shift_ms
 
     def _prepare_features(self, waveform: Tensor, sample_rate: int) -> Tensor:
         """
@@ -131,7 +120,10 @@ class OfflineVADInferencer:
         )
 
         features = self.feature_extractor(waveform)
-        features = ensure_time_major_features(features, feature_dim=self.n_mels)
+        features = ensure_time_major_features(
+            features,
+            feature_dim=self.audio_config.n_mels,
+        )
 
         return prepare_conv1d_input(features, self.device)
 
@@ -156,7 +148,9 @@ class OfflineVADInferencer:
         probabilities, predictions = logits_to_predictions(logits, self.threshold)
 
         num_frames = probabilities.shape[0]
-        frame_times = torch.arange(num_frames, dtype=torch.float32) * (self.frame_shift_ms / 1000.0)
+        frame_times = torch.arange(num_frames, dtype=torch.float32) * (
+            self.audio_config.frame_shift_ms / 1000.0
+        )
 
         return OfflineVADPrediction(
             waveform=waveform,

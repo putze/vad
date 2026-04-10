@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor, nn
 
+from vad.config import AudioConfig, InferenceConfig, StreamingConfig
 from vad.inference.utils import (
     FeatureExtractorProtocol,
     logits_to_predictions,
@@ -58,10 +59,9 @@ class StreamingVADInferencer:
         model: nn.Module,
         feature_extractor: FeatureExtractorProtocol,
         *,
-        sample_rate: int = 16000,
-        hop_length: int = 160,
-        threshold: float = 0.5,
-        min_buffer_samples: int = 400,
+        audio_config: AudioConfig,
+        inference_config: InferenceConfig | None = None,
+        streaming_config: StreamingConfig | None = None,
         device: torch.device | None = None,
     ) -> None:
         """
@@ -71,36 +71,65 @@ class StreamingVADInferencer:
             model: Trained VAD model.
             feature_extractor: Feature extractor applied to the buffered audio.
                 It must return features with shape ``[T, F]``.
-            sample_rate: Expected sample rate in Hz.
-            hop_length: Feature hop length in samples. This is used to convert
-                frame indices to timestamps.
-            threshold: Probability threshold for speech detection.
-            min_buffer_samples: Minimum number of buffered samples required
-                before attempting inference.
+            audio_config: Shared audio configuration used during training.
+            inference_config: Inference-time settings such as threshold.
+            streaming_config: Streaming-specific settings.
             device: Torch device used for inference.
-
-        Raises:
-            ValueError: If any numeric parameter is invalid.
         """
-        if sample_rate <= 0:
-            raise ValueError(f"sample_rate must be positive, got {sample_rate}")
-        if hop_length <= 0:
-            raise ValueError(f"hop_length must be positive, got {hop_length}")
-        if not 0.0 <= threshold <= 1.0:
-            raise ValueError(f"threshold must be in [0, 1], got {threshold}")
-        if min_buffer_samples < 0:
-            raise ValueError(f"min_buffer_samples must be non-negative, got {min_buffer_samples}")
+        inference_config = inference_config or InferenceConfig()
+        streaming_config = streaming_config or StreamingConfig()
+
+        if audio_config.sample_rate <= 0:
+            raise ValueError(f"sample_rate must be positive, got {audio_config.sample_rate}")
+        if audio_config.hop_length_samples <= 0:
+            raise ValueError(f"hop_length must be positive, got {audio_config.hop_length_samples}")
+        if not 0.0 <= inference_config.threshold <= 1.0:
+            raise ValueError(f"threshold must be in [0, 1], got {inference_config.threshold}")
+        if streaming_config.chunk_seconds <= 0:
+            raise ValueError(
+                f"chunk_seconds must be positive, got {streaming_config.chunk_seconds}"
+            )
+        if streaming_config.min_buffer_seconds < 0:
+            raise ValueError(
+                "min_buffer_seconds must be non-negative, "
+                f"got {streaming_config.min_buffer_seconds}"
+            )
 
         self.model = model.eval()
         self.feature_extractor = feature_extractor
-        self.sample_rate = sample_rate
-        self.hop_length = hop_length
-        self.threshold = threshold
-        self.min_buffer_samples = min_buffer_samples
+        self.audio_config = audio_config
+        self.inference_config = inference_config
+        self.streaming_config = streaming_config
+        self.min_buffer_samples = max(
+            audio_config.frame_length_samples,
+            int(round(streaming_config.min_buffer_seconds * audio_config.sample_rate)),
+        )
         self.device = device or torch.device("cpu")
 
         self.model.to(self.device)
         self.reset()
+
+    @property
+    def sample_rate(self) -> int:
+        return self.audio_config.sample_rate
+
+    @property
+    def hop_length(self) -> int:
+        return self.audio_config.hop_length_samples
+
+    @property
+    def threshold(self) -> float:
+        return self.inference_config.threshold
+
+    @property
+    def frame_hop_sec(self) -> float:
+        """
+        Return the duration of one frame hop in seconds.
+
+        Returns:
+            Frame hop duration in seconds.
+        """
+        return self.hop_length / self.sample_rate
 
     def reset(self) -> None:
         """
@@ -112,16 +141,6 @@ class StreamingVADInferencer:
         self.sample_buffer = torch.empty(0, dtype=torch.float32)
         self.num_samples_seen = 0
         self.num_frames_emitted = 0
-
-    @property
-    def frame_hop_sec(self) -> float:
-        """
-        Return the duration of one frame hop in seconds.
-
-        Returns:
-            Frame hop duration in seconds.
-        """
-        return self.hop_length / self.sample_rate
 
     def _extract_features(self, waveform: Tensor) -> Tensor:
         """

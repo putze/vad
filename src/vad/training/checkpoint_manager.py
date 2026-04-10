@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,23 @@ from torch import nn
 from torch.optim import Optimizer
 
 from vad.training.callbacks import MetricTracker
+
+
+def _serialize_extra_state(extra_state: dict[str, Any] | None) -> dict[str, Any] | None:
+    """
+    Convert dataclass values in extra_state to plain dictionaries so they
+    can be safely saved and reloaded.
+    """
+    if extra_state is None:
+        return None
+
+    serialized: dict[str, Any] = {}
+    for key, value in extra_state.items():
+        if is_dataclass(value):
+            serialized[key] = asdict(value)
+        else:
+            serialized[key] = value
+    return serialized
 
 
 class CheckpointManager:
@@ -100,8 +118,11 @@ class CheckpointManager:
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
         }
-        if extra_state is not None:
-            state["extra_state"] = extra_state
+
+        serialized_extra_state = _serialize_extra_state(extra_state)
+        if serialized_extra_state is not None:
+            state["extra_state"] = serialized_extra_state
+
         return state
 
     def step(

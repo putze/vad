@@ -6,6 +6,7 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
+from vad.config import InferenceConfig, StreamingConfig
 from vad.data.audio_utils import ensure_mono_waveform
 from vad.data.file_utils import load_audio
 from vad.data.preprocessing import LogMelFeatureExtractor, WaveformPreprocessor
@@ -23,14 +24,6 @@ class StreamingFeatureExtractorAdapter:
         feature_extractor: LogMelFeatureExtractor,
         n_mels: int,
     ) -> None:
-        """
-        Initialize the streaming feature extractor adapter.
-
-        Args:
-            waveform_preprocessor: Waveform preprocessor.
-            feature_extractor: Frame-level feature extractor.
-            n_mels: Expected feature dimension.
-        """
         self.waveform_preprocessor = waveform_preprocessor
         self.feature_extractor = feature_extractor
         self.n_mels = n_mels
@@ -90,89 +83,75 @@ def parse_args() -> argparse.Namespace:
         help="Decision threshold applied to speech probabilities.",
     )
     parser.add_argument(
-        "--target-sample-rate",
-        type=int,
-        default=16000,
-        help="Target sample rate in Hz.",
-    )
-    parser.add_argument(
-        "--n-mels",
-        type=int,
-        default=40,
-        help="Number of mel bins.",
-    )
-    parser.add_argument(
-        "--frame-length-ms",
+        "--min-buffer-ms",
         type=float,
         default=25.0,
-        help="Frame length in milliseconds.",
+        help="Minimum buffered audio before inference, in milliseconds.",
     )
     parser.add_argument(
-        "--frame-shift-ms",
-        type=float,
-        default=10.0,
-        help="Frame hop in milliseconds.",
-    )
-    parser.add_argument(
-        "--feature-context-frames",
-        type=int,
-        default=20,
-        help="Number of past feature frames retained as left context.",
-    )
-    parser.add_argument(
-        "--min-buffer-samples",
-        type=int,
-        default=400,
-        help="Minimum buffered samples before feature extraction.",
+        "--device",
+        type=str,
+        default=None,
+        help="Torch device, e.g. 'cpu', 'cuda', or 'mps'. Defaults to auto-detect.",
     )
     return parser.parse_args()
+
+
+def resolve_device(device_arg: str | None) -> torch.device:
+    """Resolve torch device from CLI or auto-detect."""
+    if device_arg is not None:
+        return torch.device(device_arg)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
 def main() -> None:
     """Run simulated streaming VAD on an audio file."""
     args = parse_args()
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = resolve_device(args.device)
 
     waveform, sample_rate = load_audio(str(args.audio))
 
-    model = load_model(
+    model, audio_config, _ = load_model(
         checkpoint_path=args.checkpoint,
         device=device,
-        n_mels=args.n_mels,
     )
-
-    frame_length = round(args.target_sample_rate * args.frame_length_ms / 1000.0)
-    hop_length = round(args.target_sample_rate * args.frame_shift_ms / 1000.0)
 
     waveform_preprocessor = WaveformPreprocessor(
-        target_sample_rate=args.target_sample_rate,
+        target_sample_rate=audio_config.sample_rate,
     )
     feature_extractor = LogMelFeatureExtractor(
-        sample_rate=args.target_sample_rate,
-        frame_length=frame_length,
-        hop_length=hop_length,
-        n_fft=frame_length,
-        n_mels=args.n_mels,
+        sample_rate=audio_config.sample_rate,
+        frame_length=audio_config.frame_length_samples,
+        hop_length=audio_config.hop_length_samples,
+        n_fft=audio_config.frame_length_samples,
+        n_mels=audio_config.n_mels,
+        center=False,
     )
     extractor = StreamingFeatureExtractorAdapter(
         waveform_preprocessor=waveform_preprocessor,
         feature_extractor=feature_extractor,
-        n_mels=args.n_mels,
+        n_mels=audio_config.n_mels,
+    )
+
+    streaming_config = StreamingConfig(
+        chunk_seconds=args.chunk_ms / 1000.0,
+        min_buffer_seconds=args.min_buffer_ms / 1000.0,
     )
 
     inferencer = StreamingVADInferencer(
         model=model,
         feature_extractor=extractor,
-        sample_rate=args.target_sample_rate,
-        hop_length=hop_length,
-        threshold=args.threshold,
-        min_buffer_samples=args.min_buffer_samples,
-        feature_context_frames=args.feature_context_frames,
+        audio_config=audio_config,
+        inference_config=InferenceConfig(threshold=args.threshold),
+        streaming_config=streaming_config,
         device=device,
     )
 
-    chunk_samples = round(args.target_sample_rate * args.chunk_ms / 1000.0)
+    chunk_samples = round(audio_config.sample_rate * streaming_config.chunk_seconds)
 
     all_probabilities: list[Tensor] = []
     all_predictions: list[Tensor] = []
@@ -209,9 +188,16 @@ def main() -> None:
     predictions = torch.cat(all_predictions)
 
     print()
-    print(f"Total emitted frames: {probabilities.numel()}")
-    print(f"Mean speech probability: {probabilities.mean().item():.4f}")
-    print(f"Speech frame ratio: {predictions.float().mean().item():.4f}")
+    print(f"Audio file            : {args.audio}")
+    print(f"Checkpoint            : {args.checkpoint}")
+    print(f"Model sample rate     : {audio_config.sample_rate}")
+    print(f"Frame length (ms)     : {audio_config.frame_length_ms}")
+    print(f"Frame shift (ms)      : {audio_config.frame_shift_ms}")
+    print(f"Chunk size (ms)       : {args.chunk_ms}")
+    print(f"Min buffer (ms)       : {args.min_buffer_ms}")
+    print(f"Total emitted frames  : {probabilities.numel()}")
+    print(f"Mean speech prob      : {probabilities.mean().item():.4f}")
+    print(f"Speech frame ratio    : {predictions.float().mean().item():.4f}")
 
 
 if __name__ == "__main__":

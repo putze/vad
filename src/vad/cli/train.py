@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from typing import cast
 
 import torch
 
+from vad.config import AudioConfig, TrainingConfig
 from vad.data import (
     DataLoaderConfig,
     DatasetConfig,
@@ -21,26 +23,59 @@ from vad.models.causal_vad import CausalVAD
 from vad.training.loops import train_model
 
 
-def build_preprocessor() -> VADPreprocessor:
-    """
-    Build the preprocessing pipeline used for VAD training.
-    """
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Train the causal VAD model.")
+
+    parser.add_argument("--results-root", type=Path, required=True)
+    parser.add_argument("--labels-root", type=Path, required=True)
+    parser.add_argument("--log-dir", type=Path, default=Path("runs"))
+    parser.add_argument("--checkpoint-dir", type=Path, default=Path("checkpoints"))
+    parser.add_argument("--device", type=str, default=None)
+
+    parser.add_argument("--sample-rate", type=int, default=16000)
+    parser.add_argument("--n-mels", type=int, default=40)
+    parser.add_argument("--frame-length-ms", type=float, default=25.0)
+    parser.add_argument("--frame-shift-ms", type=float, default=10.0)
+
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--weight-decay", type=float, default=1e-4)
+    parser.add_argument("--num-epochs", type=int, default=10)
+    parser.add_argument("--train-split", type=str, default="train-clean-100")
+    parser.add_argument("--val-split", type=str, default="dev-clean")
+    parser.add_argument("--experiment-name", type=str, default="causal_conv")
+
+    return parser.parse_args()
+
+
+def resolve_device(device_arg: str | None) -> torch.device:
+    if device_arg is not None:
+        return torch.device(device_arg)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+def build_preprocessor(audio_config: AudioConfig) -> VADPreprocessor:
     waveform_preprocessor = WaveformPreprocessor(
-        target_sample_rate=16000,
+        target_sample_rate=audio_config.sample_rate,
     )
 
     feature_extractor = LogMelFeatureExtractor(
-        sample_rate=16000,
-        n_mels=40,
-        n_fft=400,
-        hop_length=160,
-        frame_length=400,
+        sample_rate=audio_config.sample_rate,
+        n_mels=audio_config.n_mels,
+        n_fft=audio_config.frame_length_samples,
+        hop_length=audio_config.hop_length_samples,
+        frame_length=audio_config.frame_length_samples,
         center=False,
     )
 
     label_aligner = LabelAligner(
-        hop_length=160,
-        frame_length=400,
+        hop_length=audio_config.hop_length_samples,
+        frame_length=audio_config.frame_length_samples,
         center=False,
     )
 
@@ -54,6 +89,7 @@ def build_preprocessor() -> VADPreprocessor:
 def build_dataset_configs(
     results_root: Path,
     labels_root: Path,
+    training_config: TrainingConfig,
 ) -> tuple[DatasetConfig, DatasetConfig]:
     """
     Build train and validation dataset configs.
@@ -62,14 +98,14 @@ def build_dataset_configs(
         results_root=results_root,
         labels_root=labels_root,
         datasets=("LibriSpeech",),
-        splits=("train-clean-100",),
+        splits=(training_config.train_split,),
     )
 
     val_config = DatasetConfig(
         results_root=results_root,
         labels_root=labels_root,
         datasets=("LibriSpeech",),
-        splits=("dev-clean",),
+        splits=(training_config.val_split,),
     )
 
     return train_config, val_config
@@ -79,6 +115,7 @@ def build_loaders(
     processor: VADPreprocessor,
     results_root: Path,
     labels_root: Path,
+    training_config: TrainingConfig,
 ) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
     """
     Build train and validation dataloaders.
@@ -89,6 +126,7 @@ def build_loaders(
     train_config, val_config = build_dataset_configs(
         results_root=results_root,
         labels_root=labels_root,
+        training_config=training_config,
     )
 
     train_dataset, val_dataset, _ = build_processed_datasets(
@@ -100,12 +138,12 @@ def build_loaders(
     )
 
     loader_config = DataLoaderConfig(
-        batch_size=16,
-        num_workers=0,
+        batch_size=training_config.batch_size,
+        num_workers=training_config.num_workers,
         pin_memory=torch.cuda.is_available(),
         train_shuffle=True,
         drop_last_train=False,
-        persistent_workers=False,
+        persistent_workers=training_config.num_workers > 0,
     )
 
     train_loader, val_loader, _ = build_dataloaders(
@@ -114,50 +152,53 @@ def build_loaders(
         test_dataset=val_dataset,
         config=loader_config,
     )
-
     return train_loader, val_loader
 
 
-def build_model(device: torch.device) -> CausalVAD:
-    """
-    Build the VAD model.
-
-    Note:
-        The training loop expects model outputs shaped [B, T] or [B, 1, T].
-        If your current model returns [B, 2, T], it must be adapted for binary
-        BCE-with-logits training.
-    """
-    model = CausalVAD(n_mels=40)
+def build_model(device: torch.device, audio_config: AudioConfig) -> CausalVAD:
+    model = CausalVAD(n_mels=audio_config.n_mels)
     return cast(CausalVAD, model.to(device))
 
 
 def train() -> None:
-    """
-    Build all training components and launch training.
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    args = parse_args()
+    device = resolve_device(args.device)
 
-    results_root = Path("/Users/antje/Blynt/LibriVAD/Results")
-    labels_root = Path("/Users/antje/Blynt/LibriVAD/Files/Labels")
-
-    log_dir = Path("runs")
-    experiment_name = "causal_conv"
-    checkpoint_path = Path("checkpoints")
-    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-
-    processor = build_preprocessor()
-    train_loader, val_loader = build_loaders(
-        processor=processor,
-        results_root=results_root,
-        labels_root=labels_root,
+    audio_config = AudioConfig(
+        sample_rate=args.sample_rate,
+        n_mels=args.n_mels,
+        frame_length_ms=args.frame_length_ms,
+        frame_shift_ms=args.frame_shift_ms,
     )
 
-    model = build_model(device)
+    training_config = TrainingConfig(
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        learning_rate=args.lr,
+        weight_decay=args.weight_decay,
+        num_epochs=args.num_epochs,
+        train_split=args.train_split,
+        val_split=args.val_split,
+        experiment_name=args.experiment_name,
+    )
+
+    args.log_dir.mkdir(parents=True, exist_ok=True)
+    args.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    processor = build_preprocessor(audio_config)
+    train_loader, val_loader = build_loaders(
+        processor=processor,
+        results_root=args.results_root,
+        labels_root=args.labels_root,
+        training_config=training_config,
+    )
+
+    model = build_model(device, audio_config)
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=1e-3,
-        weight_decay=1e-4,
+        lr=training_config.learning_rate,
+        weight_decay=training_config.weight_decay,
     )
 
     train_model(
@@ -166,10 +207,12 @@ def train() -> None:
         val_loader=val_loader,
         optimizer=optimizer,
         device=device,
-        num_epochs=2,
-        log_dir=log_dir,
-        experiment_name=experiment_name,
-        checkpoint_path=checkpoint_path,
+        num_epochs=training_config.num_epochs,
+        log_dir=args.log_dir,
+        experiment_name=training_config.experiment_name,
+        checkpoint_path=args.checkpoint_dir,
+        audio_config=audio_config,
+        training_config=training_config,
     )
 
 

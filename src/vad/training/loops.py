@@ -9,6 +9,7 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+from vad.config import AudioConfig, TrainingConfig
 from vad.training.callbacks import EarlyStopping
 from vad.training.checkpoint_manager import CheckpointManager
 from vad.training.formatting import format_metrics
@@ -178,6 +179,8 @@ def train_model(
     log_dir: str | Path = "runs/vad",
     experiment_name: str = "causal_conv",
     checkpoint_path: str | Path = "checkpoints",
+    audio_config: AudioConfig | None = None,
+    training_config: TrainingConfig | None = None,
 ) -> None:
     """
     Train a model and evaluate it on a validation set each epoch.
@@ -199,6 +202,8 @@ def train_model(
         log_dir: Root directory for TensorBoard logs.
         experiment_name: Name used to group runs of the same experiment.
         checkpoint_path: Root directory for checkpoints.
+        audio_config: Optional audio/preprocessing config to store in checkpoints.
+        training_config: Optional training config to store in checkpoints.
     """
     model.to(device)
 
@@ -251,12 +256,24 @@ def train_model(
                 "val_f1": val_metrics.f1,
                 "val_accuracy": val_metrics.accuracy,
             }
+
+            extra_state: dict[str, object] = {
+                "optimizer_name": optimizer.__class__.__name__,
+                "device": str(device),
+            }
+            if audio_config is not None:
+                extra_state["audio_config"] = audio_config
+            if training_config is not None:
+                extra_state["training_config"] = training_config
+
             improved = checkpoint_manager.step(
                 epoch=epoch,
                 model=model,
                 optimizer=optimizer,
                 metrics=metrics,
+                extra_state=extra_state,
             )
+
             if improved:
                 print(
                     f"Saved new best checkpoint with "
@@ -271,6 +288,14 @@ def train_model(
             hparams={
                 "optimizer": optimizer.__class__.__name__,
                 "epochs": num_epochs,
+                "audio_sample_rate": audio_config.sample_rate if audio_config is not None else None,
+                "audio_n_mels": audio_config.n_mels if audio_config is not None else None,
+                "audio_frame_length_ms": (
+                    audio_config.frame_length_ms if audio_config is not None else None
+                ),
+                "audio_frame_shift_ms": (
+                    audio_config.frame_shift_ms if audio_config is not None else None
+                ),
             },
             final_metrics={
                 "hparam/val_loss": val_metrics.loss,

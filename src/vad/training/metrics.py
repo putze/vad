@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 import torch
 from torch import Tensor
@@ -70,6 +70,9 @@ class BinaryClassificationMetrics:
             fn=0,
             num_frames=0,
         )
+
+    def to_dict(self) -> dict[str, float]:
+        return asdict(self)
 
 
 class VADMetricsTracker:
