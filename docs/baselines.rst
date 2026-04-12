@@ -1,3 +1,5 @@
+.. _baselines:
+
 Baselines
 =========
 
@@ -8,7 +10,8 @@ To evaluate the proposed model, we compare it against a strong and widely used b
 
 - **WebRTC VAD**
 
-This provides a reference point for performance and helps assess whether the learned model brings improvements.
+This provides a practical reference point and helps assess whether the learned model
+brings improvements over a production-ready system.
 
 
 WebRTC VAD
@@ -29,10 +32,12 @@ Aggressiveness Modes
 
 WebRTC VAD exposes a parameter controlling detection strictness:
 
-- ``0``: least aggressive (more false positives)
-- ``3``: most aggressive (more false negatives)
+- ``0``: least aggressive (higher recall, more false positives)
+- ``1``: moderate
+- ``2``: balanced (default)
+- ``3``: most aggressive (higher precision, more false negatives)
 
-This allows trading off precision vs. recall.
+This parameter allows controlling the trade-off between false positives and missed speech.
 
 
 Why this baseline?
@@ -40,24 +45,24 @@ Why this baseline?
 
 WebRTC VAD is a strong baseline because:
 
-- It is widely used in practice
-- It performs reasonably well across conditions
-- It requires no training data
+- It is widely used in real-world applications
+- It performs reasonably well across a range of acoustic conditions
+- It requires no training data or model tuning
 
-Comparing against it provides a meaningful real-world reference.
+Comparing against it provides a meaningful real-world reference for performance.
 
 
 Comparison Protocol
 -------------------
 
-Both models are evaluated under the same conditions:
+Both models are evaluated under identical conditions:
 
 - Same dataset and splits
-- Same frame resolution (10 ms)
+- Same frame resolution
 - Same label alignment procedure
 
-The learned model uses probability thresholding,
-while WebRTC produces binary decisions directly.
+The learned model produces **probabilities** that are thresholded,
+while WebRTC produces **binary decisions directly**.
 
 
 Running the comparison
@@ -80,10 +85,10 @@ What to analyze
 
 When comparing models, focus on:
 
-- **F1-score**: overall performance
+- **F1-score**: overall performance at a fixed threshold
 - **Precision vs. recall** trade-offs
-- **Robustness to noise**
-- **Consistency over time** (jitter)
+- **Robustness to noise conditions**
+- **Temporal consistency** (e.g., prediction jitter)
 
 
 Limitations of the baseline
@@ -97,10 +102,9 @@ Limitations of the baseline
 Possible Extensions
 -------------------
 
-Additional baselines could be added:
+Additional baselines could be included:
 
 - **Silero VAD** (neural, pretrained)
-- Energy-based VAD (simple heuristic)
 - Transformer-based VAD models
 
 This would provide a broader comparison spectrum.

@@ -1,7 +1,12 @@
 Quickstart
 ==========
 
-This section shows how to train a model, run inference, and compare it to a baseline.
+This section shows how to:
+
+- Train a model
+- Run inference (offline and streaming)
+- Compare against baselines with ROC/AUC
+- Launch an interactive demo
 
 
 Train a model
@@ -48,6 +53,12 @@ Example:
        --output-dir outputs \
        --show-plot
 
+This command produces:
+
+- Frame-level predictions
+- Speech probabilities
+- Optional visualization (waveform + predictions)
+
 
 Run streaming inference
 -----------------------
@@ -66,11 +77,13 @@ Optional parameters:
 - ``--min-buffer-ms``: minimum buffer before inference
 - ``--threshold``: decision threshold
 
+This mode mimics **online/low-latency inference**.
 
-Compare with WebRTC VAD
-------------------------
 
-Evaluate your model against the WebRTC baseline:
+Compare with baselines
+----------------------
+
+Evaluate your model against baselines (see :ref:`baselines`):
 
 .. code-block:: bash
 
@@ -88,6 +101,40 @@ Example:
        --split dev-clean \
        --webrtc-mode 2
 
+This prints:
+
+- Accuracy, precision, recall, F1
+- False positive / negative rates
+
+
+ROC curve and AUC
+-----------------
+
+To compute and visualize the ROC curve:
+
+.. code-block:: bash
+
+   vad-compare-models \
+       --checkpoint checkpoints/best_causal_vad.pt \
+       --split dev-clean \
+       --all-webrtc \
+       --roc-output outputs/roc.png
+
+This will:
+
+- Compute the **ROC curve** and **AUC** for the trained model
+- Plot **WebRTC operating points** (aggressiveness 0–3)
+- Save the figure to ``outputs/roc.png``
+
+You can display it interactively with:
+
+.. code-block:: bash
+
+   vad-compare-models \
+       --checkpoint checkpoints/best_causal_vad.pt \
+       --all-webrtc \
+       --show-roc
+
 
 Run the demo
 ------------
@@ -97,3 +144,16 @@ Launch the interactive Streamlit demo:
 .. code-block:: bash
 
    vad-demo
+
+The demo allows:
+
+- Uploading audio files
+- Visualizing predictions
+
+
+Next steps
+----------
+
+- See :doc:`evaluation` for details on metrics and ROC analysis
+- See :ref:`baselines` for baseline descriptions
+- Explore qualitative outputs to understand model behavior
